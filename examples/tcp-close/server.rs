@@ -13,11 +13,7 @@
 
 use crate::{helper_functions, TIMEOUT_SECONDS};
 use anyhow::Result;
-use demikernel::{
-    demi_sgarray_t,
-    runtime::types::{demi_opcode_t, demi_qresult_t},
-    LibOS, QDesc, QToken,
-};
+use demikernel::{runtime::types::demi_opcode_t, LibOS, QDesc, QToken};
 use std::{collections::HashSet, net::SocketAddr};
 
 //======================================================================================================================
@@ -56,12 +52,12 @@ pub struct TcpServer {
 //======================================================================================================================
 
 impl TcpServer {
-    pub fn new(mut libos: LibOS, local_socket_addr: SocketAddr) -> Result<Self> {
-        let sockqd: QDesc = libos.socket(AF_INET, SOCK_STREAM, 0)?;
+    pub fn new(mut libos: LibOS, local_addr: SocketAddr) -> Result<Self> {
+        let sockqd = libos.socket(AF_INET, SOCK_STREAM, 0)?;
 
-        libos.bind(sockqd, local_socket_addr)?;
+        libos.bind(sockqd, local_addr)?;
 
-        println!("Listening to: {:?}", local_socket_addr);
+        println!("Listening to: {:?}", local_addr);
 
         return Ok(Self {
             libos,
@@ -94,36 +90,34 @@ impl TcpServer {
                 }
             }
 
-            let qr: demi_qresult_t = {
-                let (index, qr): (usize, demi_qresult_t) =
-                    self.libos.wait_any(&self.pending_qtokens, Some(TIMEOUT_SECONDS))?;
-                self.mark_completed_operation(index)?;
+            let qr = {
+                let (idx, qr) = self.libos.wait_any(&self.pending_qtokens, Some(TIMEOUT_SECONDS))?;
+                self.mark_completed_operation(idx)?;
                 qr
             };
 
             match qr.qr_opcode {
                 // Accept completed.
                 demi_opcode_t::DEMI_OPC_ACCEPT => {
-                    let qd: QDesc = unsafe { qr.qr_value.ares.qd.into() };
+                    let qd = unsafe { qr.qr_value.ares.qd.into() };
                     self.handle_accept_completion(qd)?;
                     // Accept more connections.
                     self.issue_accept()?;
                 },
                 // Pop completed.
                 demi_opcode_t::DEMI_OPC_POP => {
-                    let qd: QDesc = qr.qr_qd.into();
-                    let sga: demi_sgarray_t = unsafe { qr.qr_value.sga };
-                    let seglen: usize = sga.segments[0].data_len_bytes as usize;
+                    let qd = qr.qr_qd.into();
+                    let sga = unsafe { qr.qr_value.sga };
+                    let seglen = sga.segments[0].data_len_bytes as usize;
 
                     // Ensure that client has closed the connection.
                     assert_eq!(seglen, 0, "client must have had closed the connection, but it has not");
 
                     self.libos.sgafree(sga)?;
-
                     self.handle_connection_termination(qd)?;
                 },
                 demi_opcode_t::DEMI_OPC_FAILED => {
-                    let qd: QDesc = qr.qr_qd.into();
+                    let qd = qr.qr_qd.into();
 
                     // Ensure that this error was triggered because the client has terminated the connection.
                     if !helper_functions::is_closed(qr.qr_ret) {
@@ -161,22 +155,24 @@ impl TcpServer {
             if let Some(nclients) = nclients {
                 if self.num_closed_clients >= nclients {
                     // Sanity check that all connections have been closed.
-                    const ERR_MSG: &str = "there should be no clients connected, but there are";
-                    assert_eq!(self.connected_client_qds.len(), 0, "{}", ERR_MSG);
+                    assert_eq!(
+                        self.connected_client_qds.len(),
+                        0,
+                        "there should be no clients connected"
+                    );
                     break;
                 }
             }
 
-            let qr: demi_qresult_t = {
-                let (index, qr): (usize, demi_qresult_t) =
-                    self.libos.wait_any(&self.pending_qtokens, Some(TIMEOUT_SECONDS))?;
+            let qr = {
+                let (index, qr) = self.libos.wait_any(&self.pending_qtokens, Some(TIMEOUT_SECONDS))?;
                 self.mark_completed_operation(index)?;
                 qr
             };
 
             match qr.qr_opcode {
                 demi_opcode_t::DEMI_OPC_ACCEPT => {
-                    let qd: QDesc = unsafe { qr.qr_value.ares.qd.into() };
+                    let qd = unsafe { qr.qr_value.ares.qd.into() };
                     self.num_accepted_clients += 1;
                     println!("{} clients accepted, closing socket", self.num_accepted_clients);
                     helper_functions::close_and_wait(&mut self.libos, qd)?;
@@ -209,13 +205,13 @@ impl TcpServer {
     }
 
     fn issue_accept(&mut self) -> Result<()> {
-        let qt: QToken = self.libos.accept(self.sockqd)?;
+        let qt = self.libos.accept(self.sockqd)?;
         self.pending_qtokens.push(qt);
         Ok(())
     }
 
     fn issue_pop(&mut self, qd: QDesc) -> Result<()> {
-        let qt: QToken = self.libos.pop(qd, None)?;
+        let qt = self.libos.pop(qd, None)?;
         self.pending_qtokens.push(qt);
         Ok(())
     }

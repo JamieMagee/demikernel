@@ -8,7 +8,7 @@
 // Imports
 //======================================================================================================================
 use ::anyhow::Result;
-use ::demikernel::{demi_sgarray_t, runtime::types::demi_opcode_t, LibOS, LibOSName, QDesc, QToken};
+use ::demikernel::{demi_sgarray_t, runtime::types::demi_opcode_t, LibOS, LibOSName, QDesc};
 use ::std::{env, net::SocketAddr, slice, str::FromStr, time::Duration, u8};
 use log::{error, warn};
 
@@ -33,7 +33,7 @@ const NUM_PING_PONG_ROUNDS: usize = 1024;
 const TIMEOUT_SECONDS: Duration = Duration::from_secs(256);
 
 fn mksga(libos: &mut LibOS, size: usize, value: u8) -> Result<demi_sgarray_t> {
-    let sga: demi_sgarray_t = match libos.sgaalloc(size) {
+    let sga = match libos.sgaalloc(size) {
         Ok(sga) => sga,
         Err(e) => anyhow::bail!("failed to allocate scatter-gather array: {:?}", e),
     };
@@ -41,7 +41,7 @@ fn mksga(libos: &mut LibOS, size: usize, value: u8) -> Result<demi_sgarray_t> {
     // Ensure that allocated the array has the requested size.
     if sga.segments[0].data_len_bytes as usize != size {
         freesga(libos, sga);
-        let seglen: usize = sga.segments[0].data_len_bytes as usize;
+        let seglen = sga.segments[0].data_len_bytes as usize;
         anyhow::bail!(
             "failed to allocate scatter-gather array: expected size={:?} allocated size={:?}",
             size,
@@ -50,10 +50,10 @@ fn mksga(libos: &mut LibOS, size: usize, value: u8) -> Result<demi_sgarray_t> {
     }
 
     // Fill in the array.
-    let ptr: *mut u8 = sga.segments[0].data_buf_ptr as *mut u8;
-    let len: usize = sga.segments[0].data_len_bytes as usize;
-    let slice: &mut [u8] = unsafe { slice::from_raw_parts_mut(ptr, len) };
-    let mut fill: u8 = value;
+    let ptr = sga.segments[0].data_buf_ptr as *mut u8;
+    let len = sga.segments[0].data_len_bytes as usize;
+    let slice = unsafe { slice::from_raw_parts_mut(ptr, len) };
+    let mut fill = value;
     for x in slice {
         *x = fill;
         fill = (fill % (u8::MAX - 1) + 1) as u8;
@@ -70,7 +70,7 @@ fn freesga(libos: &mut LibOS, sga: demi_sgarray_t) {
 }
 
 fn accept_and_wait(libos: &mut LibOS, sockqd: QDesc) -> Result<QDesc> {
-    let qt: QToken = match libos.accept(sockqd) {
+    let qt = match libos.accept(sockqd) {
         Ok(qt) => qt,
         Err(e) => anyhow::bail!("accept failed: {:?}", e),
     };
@@ -81,8 +81,8 @@ fn accept_and_wait(libos: &mut LibOS, sockqd: QDesc) -> Result<QDesc> {
     }
 }
 
-fn connect_and_wait(libos: &mut LibOS, sockqd: QDesc, remote_socket_addr: SocketAddr) -> Result<()> {
-    let qt: QToken = match libos.connect(sockqd, remote_socket_addr) {
+fn connect_and_wait(libos: &mut LibOS, sockqd: QDesc, remote_addr: SocketAddr) -> Result<()> {
+    let qt = match libos.connect(sockqd, remote_addr) {
         Ok(qt) => qt,
         Err(e) => anyhow::bail!("connect failed: {:?}", e),
     };
@@ -96,7 +96,7 @@ fn connect_and_wait(libos: &mut LibOS, sockqd: QDesc, remote_socket_addr: Socket
 }
 
 fn push_and_wait(libos: &mut LibOS, sockqd: QDesc, sga: &demi_sgarray_t) -> Result<()> {
-    let qt: QToken = match libos.push(sockqd, sga) {
+    let qt = match libos.push(sockqd, sga) {
         Ok(qt) => qt,
         Err(e) => anyhow::bail!("push failed: {:?}", e),
     };
@@ -110,23 +110,23 @@ fn push_and_wait(libos: &mut LibOS, sockqd: QDesc, sga: &demi_sgarray_t) -> Resu
 }
 
 fn pop_and_wait(libos: &mut LibOS, sockqd: QDesc, recvbuf: &mut [u8]) -> Result<()> {
-    let mut index: usize = 0;
+    let mut index = 0;
 
     while index < recvbuf.len() {
-        let qt: QToken = match libos.pop(sockqd, None) {
+        let qt = match libos.pop(sockqd, None) {
             Ok(qt) => qt,
             Err(e) => anyhow::bail!("pop failed: {:?}", e),
         };
-        let sga: demi_sgarray_t = match libos.wait(qt, Some(TIMEOUT_SECONDS)) {
+        let sga = match libos.wait(qt, Some(TIMEOUT_SECONDS)) {
             Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_POP => unsafe { qr.qr_value.sga },
             Ok(_) => anyhow::bail!("unexpected result"),
             Err(e) => anyhow::bail!("operation failed: {:?}", e),
         };
 
         // Copy data.
-        let ptr: *mut u8 = sga.segments[0].data_buf_ptr as *mut u8;
-        let len: usize = sga.segments[0].data_len_bytes as usize;
-        let slice: &mut [u8] = unsafe { slice::from_raw_parts_mut(ptr, len) };
+        let ptr = sga.segments[0].data_buf_ptr as *mut u8;
+        let len = sga.segments[0].data_len_bytes as usize;
+        let slice = unsafe { slice::from_raw_parts_mut(ptr, len) };
         for x in slice {
             recvbuf[index] = *x;
             index += 1;
@@ -156,7 +156,7 @@ pub struct TcpServer {
 
 impl TcpServer {
     pub fn new(mut libos: LibOS) -> Result<Self> {
-        let sockqd: QDesc = match libos.socket(AF_INET, SOCK_STREAM, 0) {
+        let sockqd = match libos.socket(AF_INET, SOCK_STREAM, 0) {
             Ok(sockqd) => sockqd,
             Err(e) => anyhow::bail!("failed to create socket: {:?}", e),
         };
@@ -169,8 +169,8 @@ impl TcpServer {
         });
     }
 
-    pub fn run(&mut self, local_socket_addr: SocketAddr, num_rounds: usize) -> Result<()> {
-        if let Err(e) = self.libos.bind(self.listening_sockqd, local_socket_addr) {
+    pub fn run(&mut self, local_addr: SocketAddr, num_rounds: usize) -> Result<()> {
+        if let Err(e) = self.libos.bind(self.listening_sockqd, local_addr) {
             anyhow::bail!("bind failed: {:?}", e)
         };
 
@@ -185,11 +185,11 @@ impl TcpServer {
 
         // Perform multiple ping-pong rounds.
         for i in 0..num_rounds {
-            let mut fill_char: u8 = (i % (u8::MAX as usize - 1) + 1) as u8;
+            let mut fill_char = (i % (u8::MAX as usize - 1) + 1) as u8;
 
             // Pop data, and sanity check it.
             {
-                let mut recvbuf: [u8; BUFSIZE_BYTES] = [0; BUFSIZE_BYTES];
+                let mut recvbuf = [0; BUFSIZE_BYTES];
                 if let Err(e) = pop_and_wait(
                     &mut self.libos,
                     self.accepted_sockqd.expect("should be a valid queue descriptor"),
@@ -257,7 +257,7 @@ pub struct TcpClient {
 
 impl TcpClient {
     pub fn new(mut libos: LibOS) -> Result<Self> {
-        let sockqd: QDesc = match libos.socket(AF_INET, SOCK_STREAM, 0) {
+        let sockqd = match libos.socket(AF_INET, SOCK_STREAM, 0) {
             Ok(sockqd) => sockqd,
             Err(e) => anyhow::bail!("failed to create socket: {:?}", e),
         };
@@ -269,14 +269,14 @@ impl TcpClient {
         });
     }
 
-    fn run(&mut self, remote_socket_addr: SocketAddr, num_rounds: usize) -> Result<()> {
-        if let Err(e) = connect_and_wait(&mut self.libos, self.sockqd, remote_socket_addr) {
+    fn run(&mut self, remote_addr: SocketAddr, num_rounds: usize) -> Result<()> {
+        if let Err(e) = connect_and_wait(&mut self.libos, self.sockqd, remote_addr) {
             anyhow::bail!("connect and wait failed: {:?}", e);
         }
 
         // Perform multiple ping-pong rounds.
         for i in 0..num_rounds {
-            let fill_char: u8 = (i % (u8::MAX as usize - 1) + 1) as u8;
+            let fill_char = (i % (u8::MAX as usize - 1) + 1) as u8;
 
             // Push data.
             {
@@ -293,11 +293,11 @@ impl TcpClient {
                 }
             }
 
-            let mut fill_check: u8 = (i % (u8::MAX as usize - 1) + 1) as u8;
+            let mut fill_check = (i % (u8::MAX as usize - 1) + 1) as u8;
 
             // Pop data, and sanity check it.
             {
-                let mut recvbuf: [u8; BUFSIZE_BYTES] = [0; BUFSIZE_BYTES];
+                let mut recvbuf = [0; BUFSIZE_BYTES];
                 if let Err(e) = pop_and_wait(&mut self.libos, self.sockqd, &mut recvbuf) {
                     anyhow::bail!("pop and wait failed: {:?}", e);
                 }
@@ -339,26 +339,25 @@ pub fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() >= 3 {
-        let libos_name: LibOSName = match LibOSName::from_env() {
+        let libos_name = match LibOSName::from_env() {
             Ok(libos_name) => libos_name.into(),
             Err(e) => anyhow::bail!("{:?}", e),
         };
-        let libos: LibOS = match LibOS::new(libos_name, None) {
+        let libos = match LibOS::new(libos_name, None) {
             Ok(libos) => libos,
             Err(e) => anyhow::bail!("failed to initialize libos: {:?}", e),
         };
-        let sockaddr: SocketAddr = SocketAddr::from_str(&args[2])?;
+        let sockaddr = SocketAddr::from_str(&args[2])?;
 
         if args[1] == "--server" {
-            let mut server: TcpServer = TcpServer::new(libos)?;
+            let mut server = TcpServer::new(libos)?;
             return server.run(sockaddr, NUM_PING_PONG_ROUNDS);
         } else if args[1] == "--client" {
-            let mut client: TcpClient = TcpClient::new(libos)?;
+            let mut client = TcpClient::new(libos)?;
             return client.run(sockaddr, NUM_PING_PONG_ROUNDS);
         }
     }
 
     usage(&args[0]);
-
     Ok(())
 }

@@ -8,8 +8,8 @@
 //======================================================================================================================
 
 use ::anyhow::Result;
-use ::clap::{Arg, ArgMatches, Command};
-use ::demikernel::{demi_sgarray_t, runtime::types::demi_opcode_t, LibOS, LibOSName, QDesc, QToken};
+use ::clap::{Arg, Command};
+use ::demikernel::{runtime::types::demi_opcode_t, LibOS, LibOSName, QDesc};
 use ::std::{
     net::SocketAddr,
     str::FromStr,
@@ -30,8 +30,8 @@ pub const SOCK_DGRAM: i32 = libc::SOCK_DGRAM;
 
 #[derive(Debug)]
 pub struct ProgramArguments {
-    local_socket_addr: SocketAddr,
-    remote_socket_addr: SocketAddr,
+    local_addr: SocketAddr,
+    remote_addr: SocketAddr,
 }
 
 impl ProgramArguments {
@@ -39,7 +39,7 @@ impl ProgramArguments {
     const DEFAULT_REMOTE_ADDR: &'static str = "127.0.0.1:23456";
 
     pub fn new() -> Result<Self> {
-        let matches: ArgMatches = Command::new("udp-relay")
+        let matches = Command::new("udp-relay")
             .arg(
                 Arg::new("local")
                     .long("local")
@@ -58,37 +58,37 @@ impl ProgramArguments {
             )
             .get_matches();
 
-        let mut args: ProgramArguments = ProgramArguments {
-            local_socket_addr: SocketAddr::from_str(Self::DEFAULT_LOCAL_ADDR)?,
-            remote_socket_addr: SocketAddr::from_str(Self::DEFAULT_REMOTE_ADDR)?,
+        let mut args = ProgramArguments {
+            local_addr: SocketAddr::from_str(Self::DEFAULT_LOCAL_ADDR)?,
+            remote_addr: SocketAddr::from_str(Self::DEFAULT_REMOTE_ADDR)?,
         };
 
         if let Some(addr) = matches.get_one::<String>("local") {
-            args.set_local_socket_addr(addr)?;
+            args.set_local_addr(addr)?;
         }
 
         if let Some(addr) = matches.get_one::<String>("remote") {
-            args.set_remote_socket_addr(addr)?;
+            args.set_remote_addr(addr)?;
         }
 
         Ok(args)
     }
 
-    pub fn local_socket_addr(&self) -> SocketAddr {
-        self.local_socket_addr
+    pub fn local_addr(&self) -> SocketAddr {
+        self.local_addr
     }
 
-    pub fn remote_socket_addr(&self) -> SocketAddr {
-        self.remote_socket_addr
+    pub fn remote_addr(&self) -> SocketAddr {
+        self.remote_addr
     }
 
-    fn set_local_socket_addr(&mut self, addr: &str) -> Result<()> {
-        self.local_socket_addr = SocketAddr::from_str(addr)?;
+    fn set_local_addr(&mut self, addr: &str) -> Result<()> {
+        self.local_addr = SocketAddr::from_str(addr)?;
         Ok(())
     }
 
-    fn set_remote_socket_addr(&mut self, addr: &str) -> Result<()> {
-        self.remote_socket_addr = SocketAddr::from_str(addr)?;
+    fn set_remote_addr(&mut self, addr: &str) -> Result<()> {
+        self.remote_addr = SocketAddr::from_str(addr)?;
         Ok(())
     }
 }
@@ -96,22 +96,22 @@ impl ProgramArguments {
 struct Application {
     libos: LibOS,
     sockqd: QDesc,
-    remote_socket_addr: SocketAddr,
+    remote_addr: SocketAddr,
 }
 
 impl Application {
     const LOG_INTERVAL_SECONDS: u64 = 5;
 
     pub fn new(mut libos: LibOS, args: &ProgramArguments) -> Result<Self> {
-        let local_socket_addr: SocketAddr = args.local_socket_addr();
-        let remote_socket_addr: SocketAddr = args.remote_socket_addr();
+        let local_addr = args.local_addr();
+        let remote_addr = args.remote_addr();
 
-        let sockqd: QDesc = match libos.socket(AF_INET, SOCK_DGRAM, 0) {
+        let sockqd = match libos.socket(AF_INET, SOCK_DGRAM, 0) {
             Ok(sockqd) => sockqd,
             Err(e) => anyhow::bail!("failed to create socket: {:?}", e),
         };
 
-        match libos.bind(sockqd, local_socket_addr) {
+        match libos.bind(sockqd, local_addr) {
             Ok(()) => (),
             Err(e) => {
                 // If error, close socket.
@@ -123,24 +123,24 @@ impl Application {
             },
         };
 
-        println!("Local Address:  {:?}", local_socket_addr);
-        println!("Remote Address: {:?}", remote_socket_addr);
+        println!("Local Address:  {:?}", local_addr);
+        println!("Remote Address: {:?}", remote_addr);
 
         Ok(Self {
             libos,
             sockqd,
-            remote_socket_addr,
+            remote_addr,
         })
     }
 
     pub fn run(&mut self) -> Result<()> {
-        let start_time: Instant = Instant::now();
-        let mut num_bytes: usize = 0;
-        let mut qtokens: Vec<QToken> = Vec::new();
-        let mut last_log_time: Instant = Instant::now();
+        let start_time = Instant::now();
+        let mut num_bytes = 0;
+        let mut qtokens = Vec::new();
+        let mut last_log_time = Instant::now();
 
         // Pop first packet.
-        let qt: QToken = match self.libos.pop(self.sockqd, None) {
+        let qt = match self.libos.pop(self.sockqd, None) {
             Ok(qt) => qt,
             Err(e) => anyhow::bail!("failed to pop data from socket: {:?}", e),
         };
@@ -149,7 +149,7 @@ impl Application {
         loop {
             // Dump statistics.
             if last_log_time.elapsed() > Duration::from_secs(Self::LOG_INTERVAL_SECONDS) {
-                let elapsed: Duration = Instant::now() - start_time;
+                let elapsed = Instant::now() - start_time;
                 println!("{:?} B / {:?} us", num_bytes, elapsed.as_micros());
                 last_log_time = Instant::now();
             }
@@ -164,11 +164,11 @@ impl Application {
             match qr.qr_opcode {
                 // Pop completed.
                 demi_opcode_t::DEMI_OPC_POP => {
-                    let sga: demi_sgarray_t = unsafe { qr.qr_value.sga };
+                    let sga = unsafe { qr.qr_value.sga };
 
                     num_bytes += sga.segments[0].data_len_bytes as usize;
 
-                    let qt: QToken = match self.libos.pushto(self.sockqd, &sga, self.remote_socket_addr) {
+                    let qt = match self.libos.pushto(self.sockqd, &sga, self.remote_addr) {
                         Ok(qt) => qt,
                         Err(e) => {
                             // If error, free scatter-gather array.
@@ -190,7 +190,7 @@ impl Application {
                 // Push completed.
                 demi_opcode_t::DEMI_OPC_PUSH => {
                     // Pop another packet.
-                    let qt: QToken = match self.libos.pop(self.sockqd, None) {
+                    let qt = match self.libos.pop(self.sockqd, None) {
                         Ok(qt) => qt,
                         Err(e) => anyhow::bail!("failed to pop data from socket: {:?}", e),
                     };
@@ -217,12 +217,12 @@ impl Drop for Application {
 }
 
 fn main() -> Result<()> {
-    let args: ProgramArguments = ProgramArguments::new()?;
-    let libos_name: LibOSName = match LibOSName::from_env() {
+    let args = ProgramArguments::new()?;
+    let libos_name = match LibOSName::from_env() {
         Ok(libos_name) => libos_name.into(),
         Err(e) => panic!("{:?}", e),
     };
-    let libos: LibOS = match LibOS::new(libos_name, None) {
+    let libos = match LibOS::new(libos_name, None) {
         Ok(libos) => libos,
         Err(e) => panic!("failed to initialize libos: {:?}", e),
     };

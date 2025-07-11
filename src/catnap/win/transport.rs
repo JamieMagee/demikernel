@@ -316,7 +316,7 @@ impl NetworkTransport for SharedCatnapTransport {
         Ok(())
     }
 
-    fn get_runtime(&self) -> &SharedDemiRuntime {
+    fn runtime(&self) -> &SharedDemiRuntime {
         &self.0.runtime
     }
 }

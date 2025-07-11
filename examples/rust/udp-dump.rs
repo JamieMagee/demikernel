@@ -8,8 +8,8 @@
 //======================================================================================================================
 
 use ::anyhow::Result;
-use ::clap::{Arg, ArgMatches, Command};
-use ::demikernel::{demi_sgarray_t, runtime::types::demi_opcode_t, LibOS, LibOSName, QDesc, QToken};
+use ::clap::{Arg, Command};
+use ::demikernel::{runtime::types::demi_opcode_t, LibOS, LibOSName, QDesc};
 use ::std::{
     net::SocketAddr,
     str::FromStr,
@@ -30,14 +30,14 @@ pub const SOCK_DGRAM: i32 = libc::SOCK_DGRAM;
 
 #[derive(Debug)]
 struct ProgramArguments {
-    local_socket_addr: SocketAddr,
+    local_addr: SocketAddr,
 }
 
 impl ProgramArguments {
     const DEFAULT_LOCAL_IPV4_ADDR: &'static str = "127.0.0.1:12345";
 
     pub fn new() -> Result<Self> {
-        let matches: ArgMatches = Command::new("udp-dump")
+        let matches = Command::new("udp-dump")
             .arg(
                 Arg::new("local")
                     .long("local")
@@ -48,23 +48,23 @@ impl ProgramArguments {
             )
             .get_matches();
 
-        let mut args: ProgramArguments = ProgramArguments {
-            local_socket_addr: SocketAddr::from_str(Self::DEFAULT_LOCAL_IPV4_ADDR)?,
+        let mut args = ProgramArguments {
+            local_addr: SocketAddr::from_str(Self::DEFAULT_LOCAL_IPV4_ADDR)?,
         };
 
         if let Some(addr) = matches.get_one::<String>("local") {
-            args.set_local_socket_addr(addr)?;
+            args.set_local_addr(addr)?;
         }
 
         Ok(args)
     }
 
-    pub fn local_socket_addr(&self) -> SocketAddr {
-        self.local_socket_addr
+    pub fn local_addr(&self) -> SocketAddr {
+        self.local_addr
     }
 
-    fn set_local_socket_addr(&mut self, addr: &str) -> Result<()> {
-        self.local_socket_addr = SocketAddr::from_str(addr)?;
+    fn set_local_addr(&mut self, addr: &str) -> Result<()> {
+        self.local_addr = SocketAddr::from_str(addr)?;
         Ok(())
     }
 }
@@ -78,13 +78,13 @@ impl Application {
     const LOG_INTERVAL_SECONDS: u64 = 5;
 
     pub fn new(mut libos: LibOS, args: &ProgramArguments) -> Result<Self> {
-        let local_socket_addr: SocketAddr = args.local_socket_addr();
-        let sockqd: QDesc = match libos.socket(AF_INET, SOCK_DGRAM, 0) {
+        let addr = args.local_addr();
+        let sockqd = match libos.socket(AF_INET, SOCK_DGRAM, 0) {
             Ok(sockqd) => sockqd,
             Err(e) => anyhow::bail!("failed to create socket: {:?}", e),
         };
 
-        match libos.bind(sockqd, local_socket_addr) {
+        match libos.bind(sockqd, addr) {
             Ok(()) => (),
             Err(e) => {
                 // If error, close socket.
@@ -96,32 +96,32 @@ impl Application {
             },
         };
 
-        println!("Local Address: {:?}", local_socket_addr);
+        println!("Local Address: {:?}", addr);
 
         Ok(Self { libos, sockqd })
     }
 
     pub fn run(&mut self) -> Result<()> {
-        let start_time: Instant = Instant::now();
-        let mut num_bytes: usize = 0;
-        let mut last_log_time: Instant = Instant::now();
+        let start_time = Instant::now();
+        let mut num_bytes = 0;
+        let mut last_log_time = Instant::now();
 
         loop {
             // Dump statistics.
             if last_log_time.elapsed() > Duration::from_secs(Self::LOG_INTERVAL_SECONDS) {
-                let elapsed_time: Duration = Instant::now() - start_time;
+                let elapsed_time = Instant::now() - start_time;
                 println!("{:?} B / {:?} us", num_bytes, elapsed_time.as_micros());
                 last_log_time = Instant::now();
             }
 
             // Drain packets.
-            let qt: QToken = match self.libos.pop(self.sockqd, None) {
+            let qt = match self.libos.pop(self.sockqd, None) {
                 Ok(qt) => qt,
                 Err(e) => anyhow::bail!("failed to pop data from socket: {:?}", e),
             };
             match self.libos.wait(qt, None) {
                 Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_POP => {
-                    let sga: demi_sgarray_t = unsafe { qr.qr_value.sga };
+                    let sga = unsafe { qr.qr_value.sga };
                     num_bytes += sga.segments[0].data_len_bytes as usize;
                     if let Err(e) = self.libos.sgafree(sga) {
                         println!("ERROR: sgafree() failed (error={:?})", e);
@@ -149,12 +149,12 @@ impl Drop for Application {
 }
 
 fn main() -> Result<()> {
-    let args: ProgramArguments = ProgramArguments::new()?;
-    let libos_name: LibOSName = match LibOSName::from_env() {
+    let args = ProgramArguments::new()?;
+    let libos_name = match LibOSName::from_env() {
         Ok(libos_name) => libos_name.into(),
         Err(e) => panic!("{:?}", e),
     };
-    let libos: LibOS = match LibOS::new(libos_name, None) {
+    let libos = match LibOS::new(libos_name, None) {
         Ok(libos) => libos,
         Err(e) => panic!("failed to initialize libos: {:?}", e),
     };

@@ -10,8 +10,8 @@
 //======================================================================================================================
 
 use ::anyhow::Result;
-use ::clap::{Arg, ArgMatches, Command};
-use ::demikernel::{demi_sgarray_t, runtime::types::demi_opcode_t, LibOS, LibOSName, QDesc, QToken};
+use ::clap::{Arg, Command};
+use ::demikernel::{demi_sgarray_t, runtime::types::demi_opcode_t, LibOS, LibOSName, QDesc};
 use ::std::{
     net::SocketAddr,
     slice,
@@ -33,7 +33,7 @@ pub const SOCK_STREAM: i32 = libc::SOCK_STREAM;
 
 #[derive(Debug)]
 pub struct ProgramArguments {
-    remote_socket_addr: SocketAddr,
+    remote_addr: SocketAddr,
     bufsize_bytes: usize,
     injection_rate_microseconds: u64,
 }
@@ -44,7 +44,7 @@ impl ProgramArguments {
     const DEFAULT_REMOTE_ADDR: &'static str = "127.0.0.1:23456";
 
     pub fn new() -> Result<Self> {
-        let matches: ArgMatches = Command::new("tcp-pktgen")
+        let matches = Command::new("tcp-pktgen")
             .arg(
                 Arg::new("remote")
                     .long("remote")
@@ -71,14 +71,14 @@ impl ProgramArguments {
             )
             .get_matches();
 
-        let mut args: ProgramArguments = ProgramArguments {
-            remote_socket_addr: SocketAddr::from_str(Self::DEFAULT_REMOTE_ADDR)?,
+        let mut args = ProgramArguments {
+            remote_addr: SocketAddr::from_str(Self::DEFAULT_REMOTE_ADDR)?,
             bufsize_bytes: Self::DEFAULT_BUFSIZE_BYTES,
             injection_rate_microseconds: Self::DEFAULT_INJECTION_RATE_MICROSECONDS,
         };
 
         if let Some(addr) = matches.get_one::<String>("remote") {
-            args.set_remote_socket_addr(addr)?;
+            args.set_remote_addr(addr)?;
         }
 
         if let Some(bufsize_bytes) = matches.get_one::<String>("bufsize") {
@@ -92,8 +92,8 @@ impl ProgramArguments {
         Ok(args)
     }
 
-    pub fn remote_socket_addr(&self) -> SocketAddr {
-        self.remote_socket_addr
+    pub fn remote_addr(&self) -> SocketAddr {
+        self.remote_addr
     }
 
     pub fn bufsize(&self) -> usize {
@@ -104,13 +104,13 @@ impl ProgramArguments {
         self.injection_rate_microseconds
     }
 
-    fn set_remote_socket_addr(&mut self, addr: &str) -> Result<()> {
-        self.remote_socket_addr = SocketAddr::from_str(addr)?;
+    fn set_remote_addr(&mut self, addr: &str) -> Result<()> {
+        self.remote_addr = SocketAddr::from_str(addr)?;
         Ok(())
     }
 
     fn set_bufsize(&mut self, bufsize_bytes: &str) -> Result<()> {
-        let bufsize_bytes: usize = bufsize_bytes.parse()?;
+        let bufsize_bytes = bufsize_bytes.parse()?;
         if bufsize_bytes > 0 {
             self.bufsize_bytes = bufsize_bytes;
             Ok(())
@@ -120,7 +120,7 @@ impl ProgramArguments {
     }
 
     fn set_injection_rate(&mut self, injection_rate_microseconds: &str) -> Result<()> {
-        let injection_rate_microseconds: u64 = injection_rate_microseconds.parse()?;
+        let injection_rate_microseconds = injection_rate_microseconds.parse()?;
         if injection_rate_microseconds > 0 {
             self.injection_rate_microseconds = injection_rate_microseconds;
             Ok(())
@@ -141,18 +141,17 @@ impl Application {
     const LOG_INTERVAL_SECONDS: u64 = 5;
 
     pub fn new(mut libos: LibOS, args: &ProgramArguments) -> Result<Self> {
-        let remote_socket_addr: SocketAddr = args.remote_socket_addr();
-        let bufsize_bytes: usize = args.bufsize();
-        let injection_rate_microseconds: u64 = args.injection_rate();
-
-        let sockqd: QDesc = match libos.socket(AF_INET, SOCK_STREAM, 0) {
+        let remote_addr = args.remote_addr();
+        let bufsize_bytes = args.bufsize();
+        let injection_rate_microseconds = args.injection_rate();
+        let sockqd = match libos.socket(AF_INET, SOCK_STREAM, 0) {
             Ok(sockqd) => sockqd,
             Err(e) => {
                 anyhow::bail!("failed to create socket: {:?}", e)
             },
         };
 
-        let qt: QToken = match libos.connect(sockqd, remote_socket_addr) {
+        let qt = match libos.connect(sockqd, remote_addr) {
             Ok(qt) => qt,
             Err(e) => {
                 // If error, free socket.
@@ -184,7 +183,7 @@ impl Application {
             },
         }
 
-        println!("Remote Address: {:?}", remote_socket_addr);
+        println!("Remote Address: {:?}", remote_addr);
 
         Ok(Self {
             libos,
@@ -195,23 +194,23 @@ impl Application {
     }
 
     pub fn run(&mut self) -> Result<()> {
-        let mut num_bytes: usize = 0;
-        let start_time: Instant = Instant::now();
-        let mut last_push_time: Instant = Instant::now();
-        let mut last_log_time: Instant = Instant::now();
+        let mut num_bytes = 0;
+        let start_time = Instant::now();
+        let mut last_push_time = Instant::now();
+        let mut last_log_time = Instant::now();
 
         loop {
             // Dump statistics.
             if last_log_time.elapsed() > Duration::from_secs(Self::LOG_INTERVAL_SECONDS) {
-                let elapsed_time: Duration = Instant::now() - start_time;
+                let elapsed_time = Instant::now() - start_time;
                 println!("{:?} B / {:?} us", num_bytes, elapsed_time.as_micros());
                 last_log_time = Instant::now();
             }
 
             if last_push_time.elapsed() > Duration::from_micros(self.injection_rate_microseconds) {
-                let sga: demi_sgarray_t = self.mksga(self.bufsize_bytes, 0x65)?;
+                let sga = self.mksga(self.bufsize_bytes, 0x65)?;
 
-                let qt: QToken = match self.libos.push(self.sockqd, &sga) {
+                let qt = match self.libos.push(self.sockqd, &sga) {
                     Ok(qt) => qt,
                     Err(e) => {
                         if let Err(e) = self.libos.sgafree(sga) {
@@ -251,7 +250,7 @@ impl Application {
     }
 
     fn mksga(&mut self, size: usize, value: u8) -> Result<demi_sgarray_t> {
-        let sga: demi_sgarray_t = match self.libos.sgaalloc(size) {
+        let sga = match self.libos.sgaalloc(size) {
             Ok(sga) => sga,
             Err(e) => anyhow::bail!("failed to allocate scatter-gather array: {:?}", e),
         };
@@ -262,7 +261,7 @@ impl Application {
                 println!("ERROR: sgafree() failed (error={:?})", e);
                 println!("WARN: leaking sga");
             }
-            let seglen: usize = sga.segments[0].data_len_bytes as usize;
+            let seglen = sga.segments[0].data_len_bytes as usize;
             anyhow::bail!(
                 "failed to allocate scatter-gather array: expected size={:?} allocated size={:?}",
                 size,
@@ -271,9 +270,9 @@ impl Application {
         }
 
         // Fill in the array.
-        let ptr: *mut u8 = sga.segments[0].data_buf_ptr as *mut u8;
-        let len: usize = sga.segments[0].data_len_bytes as usize;
-        let slice: &mut [u8] = unsafe { slice::from_raw_parts_mut(ptr, len) };
+        let ptr = sga.segments[0].data_buf_ptr as *mut u8;
+        let len = sga.segments[0].data_len_bytes as usize;
+        let slice = unsafe { slice::from_raw_parts_mut(ptr, len) };
         slice.fill(value);
 
         Ok(sga)
@@ -294,12 +293,12 @@ impl Drop for Application {
 }
 
 fn main() -> Result<()> {
-    let args: ProgramArguments = ProgramArguments::new()?;
-    let libos_name: LibOSName = match LibOSName::from_env() {
+    let args = ProgramArguments::new()?;
+    let libos_name = match LibOSName::from_env() {
         Ok(libos_name) => libos_name.into(),
         Err(e) => anyhow::bail!("{:?}", e),
     };
-    let libos: LibOS = match LibOS::new(libos_name, None) {
+    let libos = match LibOS::new(libos_name, None) {
         Ok(libos) => libos,
         Err(e) => anyhow::bail!("failed to initialize libos: {:?}", e),
     };

@@ -8,12 +8,8 @@
 //======================================================================================================================
 
 use ::anyhow::Result;
-use ::clap::{Arg, ArgMatches, Command};
-use ::demikernel::{
-    demi_sgarray_t,
-    runtime::types::{demi_opcode_t, demi_qresult_t},
-    LibOS, LibOSName, QDesc, QToken,
-};
+use ::clap::{Arg, Command};
+use ::demikernel::{runtime::types::demi_opcode_t, LibOS, LibOSName, QDesc};
 use ::std::{
     net::SocketAddr,
     str::FromStr,
@@ -34,14 +30,14 @@ pub const SOCK_STREAM: i32 = libc::SOCK_STREAM;
 
 #[derive(Debug)]
 pub struct ProgramArguments {
-    local_socket_addr: SocketAddr,
+    local_addr: SocketAddr,
 }
 
 impl ProgramArguments {
     const DEFAULT_LOCAL_IPV4_ADDR: &'static str = "127.0.0.1:12345";
 
     pub fn new() -> Result<Self> {
-        let matches: ArgMatches = Command::new("tcp-dump")
+        let matches = Command::new("tcp-dump")
             .arg(
                 Arg::new("local")
                     .long("local")
@@ -52,23 +48,23 @@ impl ProgramArguments {
             )
             .get_matches();
 
-        let mut args: ProgramArguments = ProgramArguments {
-            local_socket_addr: SocketAddr::from_str(Self::DEFAULT_LOCAL_IPV4_ADDR)?,
+        let mut args = ProgramArguments {
+            local_addr: SocketAddr::from_str(Self::DEFAULT_LOCAL_IPV4_ADDR)?,
         };
 
         if let Some(addr) = matches.get_one::<String>("local") {
-            args.set_local_socket_addr(addr)?;
+            args.set_local_addr(addr)?;
         }
 
         Ok(args)
     }
 
-    pub fn local_socket_addr(&self) -> SocketAddr {
-        self.local_socket_addr
+    pub fn local_addr(&self) -> SocketAddr {
+        self.local_addr
     }
 
-    fn set_local_socket_addr(&mut self, addr: &str) -> Result<()> {
-        self.local_socket_addr = SocketAddr::from_str(addr)?;
+    fn set_local_addr(&mut self, addr: &str) -> Result<()> {
+        self.local_addr = SocketAddr::from_str(addr)?;
         Ok(())
     }
 }
@@ -82,13 +78,13 @@ impl Application {
     const LOG_INTERVAL_SECONDS: u64 = 5;
 
     pub fn new(mut libos: LibOS, args: &ProgramArguments) -> Result<Self> {
-        let local_socket_addr: SocketAddr = args.local_socket_addr();
-        let sockqd: QDesc = match libos.socket(AF_INET, SOCK_STREAM, 0) {
+        let addr = args.local_addr();
+        let sockqd = match libos.socket(AF_INET, SOCK_STREAM, 0) {
             Ok(sockqd) => sockqd,
             Err(e) => anyhow::bail!("failed to create socket: {:?}", e),
         };
 
-        match libos.bind(sockqd, local_socket_addr) {
+        match libos.bind(sockqd, addr) {
             Ok(()) => (),
             Err(e) => {
                 // If error, close socket.
@@ -112,18 +108,18 @@ impl Application {
             },
         }
 
-        println!("Local Address: {:?}", local_socket_addr);
+        println!("Local Address: {:?}", addr);
 
         Ok(Self { libos, sockqd })
     }
 
     pub fn run(&mut self) -> Result<()> {
-        let start_time: Instant = Instant::now();
-        let mut num_clients: usize = 0;
-        let mut num_bytes: usize = 0;
-        let mut qtokens: Vec<QToken> = Vec::new();
-        let mut last_log_time: Instant = Instant::now();
-        let mut client_qds: Vec<QDesc> = Vec::default();
+        let start_time = Instant::now();
+        let mut num_clients = 0;
+        let mut num_bytes = 0;
+        let mut qtokens = Vec::new();
+        let mut last_log_time = Instant::now();
+        let mut client_qds = Vec::default();
 
         // Accept first connection.
         match self.libos.accept(self.sockqd) {
@@ -134,7 +130,7 @@ impl Application {
         loop {
             // Dump statistics.
             if last_log_time.elapsed() > Duration::from_secs(Self::LOG_INTERVAL_SECONDS) {
-                let elapsed_time: Duration = Instant::now() - start_time;
+                let elapsed_time = Instant::now() - start_time;
                 println!(
                     "nclients={:?} / {:?} B / {:?} us",
                     num_clients,
@@ -144,7 +140,7 @@ impl Application {
                 last_log_time = Instant::now();
             }
 
-            let qr: demi_qresult_t = match self.libos.wait_any(&qtokens, None) {
+            let qr = match self.libos.wait_any(&qtokens, None) {
                 Ok((i, qr)) => {
                     qtokens.swap_remove(i);
                     qr
@@ -158,7 +154,7 @@ impl Application {
                     num_clients += 1;
 
                     // Pop first packet from this connection.
-                    let sockqd: QDesc = unsafe { qr.qr_value.ares.qd.into() };
+                    let sockqd = unsafe { qr.qr_value.ares.qd.into() };
                     client_qds.push(sockqd);
                     match self.libos.pop(sockqd, None) {
                         Ok(qt) => qtokens.push(qt),
@@ -173,8 +169,8 @@ impl Application {
                 },
                 // Pop completed.
                 demi_opcode_t::DEMI_OPC_POP => {
-                    let sockqd: QDesc = qr.qr_qd.into();
-                    let sga: demi_sgarray_t = unsafe { qr.qr_value.sga };
+                    let sockqd = qr.qr_qd.into();
+                    let sga = unsafe { qr.qr_value.sga };
 
                     num_bytes += sga.segments[0].data_len_bytes as usize;
 
@@ -184,7 +180,7 @@ impl Application {
                     }
 
                     // Pop another packet.
-                    let qt: QToken = match self.libos.pop(sockqd, None) {
+                    let qt = match self.libos.pop(sockqd, None) {
                         Ok(qt) => qt,
                         Err(e) => anyhow::bail!("failed to pop data from socket: {:?}", e),
                     };
@@ -212,12 +208,12 @@ impl Drop for Application {
 }
 
 fn main() -> Result<()> {
-    let args: ProgramArguments = ProgramArguments::new()?;
-    let libos_name: LibOSName = match LibOSName::from_env() {
+    let args = ProgramArguments::new()?;
+    let libos_name = match LibOSName::from_env() {
         Ok(libos_name) => libos_name.into(),
         Err(e) => anyhow::bail!("{:?}", e),
     };
-    let libos: LibOS = match LibOS::new(libos_name, None) {
+    let libos = match LibOS::new(libos_name, None) {
         Ok(libos) => libos,
         Err(e) => anyhow::bail!("failed to initialize libos: {:?}", e.cause),
     };

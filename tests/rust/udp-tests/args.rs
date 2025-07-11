@@ -2,7 +2,7 @@
 // Licensed under the MIT license.
 
 use anyhow::Result;
-use clap::{Arg, ArgMatches, Command};
+use clap::{Arg, Command};
 use std::{
     net::{SocketAddr, SocketAddrV4},
     str::FromStr,
@@ -10,13 +10,13 @@ use std::{
 
 #[derive(Debug)]
 pub struct ProgramArguments {
-    local_socket_addr: SocketAddr,
-    remote_socket_addr: SocketAddr,
+    local_addr: SocketAddr,
+    remote_addr: SocketAddr,
 }
 
 impl ProgramArguments {
     pub fn new() -> Result<Self> {
-        let matches: ArgMatches = Command::new("udp-tests")
+        let matches = Command::new("udp-tests")
             .arg(
                 Arg::new("local")
                     .long("local-address")
@@ -35,29 +35,29 @@ impl ProgramArguments {
             )
             .get_matches();
 
-        let local_socket_addr: SocketAddr = SocketAddr::V4({
-            let local_socket_addr: &String = matches.get_one::<String>("local").expect("missing address");
-            SocketAddrV4::from_str(local_socket_addr)?
+        let local_addr = SocketAddr::V4({
+            let addr = matches.get_one::<String>("local").expect("missing address");
+            SocketAddrV4::from_str(addr)?
         });
 
-        let remote_socket_addr: SocketAddr = SocketAddr::V4({
-            let remote_socket_addr: &String = matches.get_one::<String>("remote").expect("missing address");
-            SocketAddrV4::from_str(remote_socket_addr)?
+        let remote_addr = SocketAddr::V4({
+            let addr = matches.get_one::<String>("remote").expect("missing address");
+            SocketAddrV4::from_str(addr)?
         });
 
         Ok(Self {
-            local_socket_addr,
-            remote_socket_addr,
+            local_addr,
+            remote_addr,
         })
     }
 
-    pub fn local_socket_addr(&self) -> SocketAddr {
-        self.local_socket_addr
+    pub fn local_addr(&self) -> SocketAddr {
+        self.local_addr
     }
 
-    // ToDo: Remove this `unused` annotation after remote_socket_addr is used (when new tests are added to this file).
+    // ToDo: Remove this `unused` annotation after remote_addr is used (when new tests are added to this file).
     #[allow(unused)]
-    pub fn get_remote_socket_addr(&self) -> SocketAddr {
-        self.remote_socket_addr
+    pub fn get_remote_addr(&self) -> SocketAddr {
+        self.remote_addr
     }
 }

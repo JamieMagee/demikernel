@@ -9,7 +9,7 @@
 // Imports
 //======================================================================================================================
 use ::anyhow::Result;
-use ::demikernel::{demi_sgarray_t, runtime::types::demi_opcode_t, LibOS, LibOSName, QDesc, QToken};
+use ::demikernel::{demi_sgarray_t, runtime::types::demi_opcode_t, LibOS, LibOSName, QDesc};
 use ::std::{env, net::SocketAddr, slice, str::FromStr, time::Duration};
 use log::{error, warn};
 
@@ -34,17 +34,17 @@ const ITERATIONS: usize = u8::MAX as usize;
 const TIMEOUT_SECONDS: Duration = Duration::from_secs(256);
 
 fn mksga(libos: &mut LibOS, value: u8) -> Result<demi_sgarray_t> {
-    let sga: demi_sgarray_t = match libos.sgaalloc(BUF_SIZE_BYTES) {
+    let sga = match libos.sgaalloc(BUF_SIZE_BYTES) {
         Ok(sga) => sga,
         Err(e) => anyhow::bail!("failed to allocate scatter-gather array: {:?}", e),
     };
 
     // Create pointer for filling the array.
-    let ptr: *mut u8 = sga.segments[0].data_buf_ptr as *mut u8;
+    let ptr = sga.segments[0].data_buf_ptr as *mut u8;
     // Ensure that allocated array has the requested size.
     if sga.segments[0].data_len_bytes as usize != BUF_SIZE_BYTES || ptr.is_null() {
         freesga(libos, sga);
-        let seglen: usize = sga.segments[0].data_len_bytes as usize;
+        let seglen = sga.segments[0].data_len_bytes as usize;
         anyhow::bail!(
             "failed to allocate scatter-gather array: expected size={:?} allocated size={:?}",
             BUF_SIZE_BYTES,
@@ -52,7 +52,7 @@ fn mksga(libos: &mut LibOS, value: u8) -> Result<demi_sgarray_t> {
         );
     }
 
-    let slice: &mut [u8] = unsafe { slice::from_raw_parts_mut(ptr, BUF_SIZE_BYTES) };
+    let slice = unsafe { slice::from_raw_parts_mut(ptr, BUF_SIZE_BYTES) };
 
     // Fill in the array.
     for x in slice {
@@ -83,7 +83,7 @@ pub struct TcpServer {
 
 impl TcpServer {
     pub fn new(mut libos: LibOS) -> Result<Self> {
-        let sockqd: QDesc = match libos.socket(AF_INET, SOCK_STREAM, 0) {
+        let sockqd = match libos.socket(AF_INET, SOCK_STREAM, 0) {
             Ok(sockqd) => sockqd,
             Err(e) => anyhow::bail!("failed to create socket: {:?}", e),
         };
@@ -98,7 +98,7 @@ impl TcpServer {
     fn pop_rounds(&mut self) -> Result<()> {
         for i in 0..ITERATIONS {
             // Pop data.
-            let qt: QToken = match self.libos.pop(
+            let qt = match self.libos.pop(
                 self.accepted_sockqd.expect("should be a valid queue descriptor"),
                 Some(BUF_SIZE_BYTES),
             ) {
@@ -106,7 +106,7 @@ impl TcpServer {
                 Err(e) => anyhow::bail!("pop failed: {:?}", e.cause),
             };
 
-            let sga: demi_sgarray_t = match self.libos.wait(qt, Some(TIMEOUT_SECONDS)) {
+            let sga = match self.libos.wait(qt, Some(TIMEOUT_SECONDS)) {
                 Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_POP => unsafe { qr.qr_value.sga },
                 Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_FAILED => anyhow::bail!("pop failed: {}", qr.qr_ret),
                 Ok(qr) => anyhow::bail!("unexpected opcode: {:?}", qr.qr_opcode),
@@ -119,13 +119,13 @@ impl TcpServer {
             };
 
             // Sanity check received data.
-            let ptr: *mut u8 = sga.segments[0].data_buf_ptr as *mut u8;
-            let bytes: usize = sga.segments[0].data_len_bytes as usize;
+            let ptr = sga.segments[0].data_buf_ptr as *mut u8;
+            let bytes = sga.segments[0].data_len_bytes as usize;
             debug_assert_eq!(bytes, BUF_SIZE_BYTES);
             debug_assert!(ptr.is_aligned());
             debug_assert_eq!(ptr.is_null(), false);
 
-            let slice: &mut [u8] = unsafe { slice::from_raw_parts_mut(ptr, BUF_SIZE_BYTES) };
+            let slice = unsafe { slice::from_raw_parts_mut(ptr, BUF_SIZE_BYTES) };
 
             for x in slice {
                 demikernel::ensure_eq!(*x, i as u8);
@@ -137,8 +137,8 @@ impl TcpServer {
         Ok(())
     }
 
-    pub fn run(&mut self, local_socket_addr: SocketAddr) -> Result<()> {
-        if let Err(e) = self.libos.bind(self.listening_sockqd, local_socket_addr) {
+    pub fn run(&mut self, local_addr: SocketAddr) -> Result<()> {
+        if let Err(e) = self.libos.bind(self.listening_sockqd, local_addr) {
             anyhow::bail!("bind failed: {:?}", e.cause)
         };
 
@@ -146,7 +146,7 @@ impl TcpServer {
             anyhow::bail!("listen failed: {:?}", e.cause)
         };
 
-        let qt: QToken = match self.libos.accept(self.listening_sockqd) {
+        let qt = match self.libos.accept(self.listening_sockqd) {
             Ok(qt) => qt,
             Err(e) => anyhow::bail!("accept failed: {:?}", e.cause),
         };
@@ -184,7 +184,7 @@ pub struct TcpClient {
 
 impl TcpClient {
     pub fn new(mut libos: LibOS) -> Result<Self> {
-        let sockqd: QDesc = match libos.socket(AF_INET, SOCK_STREAM, 0) {
+        let sockqd = match libos.socket(AF_INET, SOCK_STREAM, 0) {
             Ok(sockqd) => sockqd,
             Err(e) => anyhow::bail!("failed to create socket: {:?}", e.cause),
         };
@@ -192,8 +192,8 @@ impl TcpClient {
         return Ok(Self { libos, sockqd });
     }
 
-    pub fn run(&mut self, remote_socket_addr: SocketAddr) -> Result<()> {
-        let qt: QToken = match self.libos.connect(self.sockqd, remote_socket_addr) {
+    pub fn run(&mut self, remote_addr: SocketAddr) -> Result<()> {
+        let qt = match self.libos.connect(self.sockqd, remote_addr) {
             Ok(qt) => qt,
             Err(e) => anyhow::bail!("connect failed: {:?}", e.cause),
         };
@@ -207,8 +207,8 @@ impl TcpClient {
 
         // Perform multiple blocking push rounds.
         for i in 0..ITERATIONS {
-            let sga: demi_sgarray_t = mksga(&mut self.libos, i as u8)?;
-            let qt: QToken = match self.libos.push(self.sockqd, &sga) {
+            let sga = mksga(&mut self.libos, i as u8)?;
+            let qt = match self.libos.push(self.sockqd, &sga) {
                 Ok(qt) => qt,
                 Err(e) => {
                     freesga(&mut self.libos, sga);
@@ -225,11 +225,11 @@ impl TcpClient {
         }
 
         // Perform multiple non-blocking push rounds.
-        let mut qts: Vec<QToken> = Vec::with_capacity(ITERATIONS);
-        let mut sgas: Vec<demi_sgarray_t> = Vec::with_capacity(ITERATIONS);
+        let mut qts = Vec::with_capacity(ITERATIONS);
+        let mut sgas = Vec::with_capacity(ITERATIONS);
         for i in 0..ITERATIONS {
             // Create scatter-gather array.
-            let sga: demi_sgarray_t = mksga(&mut self.libos, i as u8)?;
+            let sga = mksga(&mut self.libos, i as u8)?;
 
             // Push data.
             qts.push(match self.libos.push(self.sockqd, &sga) {
@@ -246,9 +246,9 @@ impl TcpClient {
         for i in 0..ITERATIONS {
             match self.libos.wait_any(&qts, Some(TIMEOUT_SECONDS)) {
                 Ok((i, qr)) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_PUSH => {
-                    let qt: QToken = qts.remove(i);
+                    let qt = qts.remove(i);
                     debug_assert_eq!(qt, qr.qr_qt.into());
-                    let sga: demi_sgarray_t = sgas.remove(i);
+                    let sga = sgas.remove(i);
                     self.libos.sgafree(sga)?;
                 },
                 Ok((_, qr)) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_FAILED => {
@@ -281,21 +281,21 @@ pub fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() >= 3 {
-        let libos_name: LibOSName = match LibOSName::from_env() {
+        let libos_name = match LibOSName::from_env() {
             Ok(libos_name) => libos_name.into(),
             Err(e) => anyhow::bail!("{:?}", e),
         };
-        let libos: LibOS = match LibOS::new(libos_name, None) {
+        let libos = match LibOS::new(libos_name, None) {
             Ok(libos) => libos,
             Err(e) => anyhow::bail!("failed to initialize libos: {:?}", e.cause),
         };
-        let sockaddr: SocketAddr = SocketAddr::from_str(&args[2])?;
+        let sockaddr = SocketAddr::from_str(&args[2])?;
 
         if args[1] == "--server" {
-            let mut server: TcpServer = TcpServer::new(libos)?;
+            let mut server = TcpServer::new(libos)?;
             return server.run(sockaddr);
         } else if args[1] == "--client" {
-            let mut client: TcpClient = TcpClient::new(libos)?;
+            let mut client = TcpClient::new(libos)?;
             return client.run(sockaddr);
         }
     }

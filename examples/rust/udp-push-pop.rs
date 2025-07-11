@@ -6,7 +6,7 @@
 //======================================================================================================================
 
 use ::anyhow::Result;
-use ::demikernel::{demi_sgarray_t, runtime::types::demi_opcode_t, LibOS, LibOSName, QDesc, QToken};
+use ::demikernel::{demi_sgarray_t, runtime::types::demi_opcode_t, LibOS, LibOSName, QDesc};
 use ::std::{env, net::SocketAddr, slice, str::FromStr, time::Duration};
 use log::{error, warn};
 
@@ -32,7 +32,7 @@ const NUM_SENDS: usize = 1024;
 const TIMEOUT_SECONDS: Duration = Duration::from_secs(256);
 
 fn mksga(libos: &mut LibOS, size: usize, value: u8) -> Result<demi_sgarray_t> {
-    let sga: demi_sgarray_t = match libos.sgaalloc(size) {
+    let sga = match libos.sgaalloc(size) {
         Ok(sga) => sga,
         Err(e) => panic!("failed to allocate scatter-gather array: {:?}", e),
     };
@@ -40,7 +40,7 @@ fn mksga(libos: &mut LibOS, size: usize, value: u8) -> Result<demi_sgarray_t> {
     // Ensure that allocated array has the requested size.
     if sga.segments[0].data_len_bytes as usize != size {
         freesga(libos, sga);
-        let seglen: usize = sga.segments[0].data_len_bytes as usize;
+        let seglen = sga.segments[0].data_len_bytes as usize;
         anyhow::bail!(
             "failed to allocate scatter-gather array: expected size={:?} allocated size={:?}",
             size,
@@ -49,9 +49,9 @@ fn mksga(libos: &mut LibOS, size: usize, value: u8) -> Result<demi_sgarray_t> {
     }
 
     // Fill in the array.
-    let ptr: *mut u8 = sga.segments[0].data_buf_ptr as *mut u8;
-    let len: usize = sga.segments[0].data_len_bytes as usize;
-    let slice: &mut [u8] = unsafe { slice::from_raw_parts_mut(ptr, len) };
+    let ptr = sga.segments[0].data_buf_ptr as *mut u8;
+    let len = sga.segments[0].data_len_bytes as usize;
+    let slice = unsafe { slice::from_raw_parts_mut(ptr, len) };
     slice.fill(value);
 
     Ok(sga)
@@ -79,7 +79,7 @@ pub struct UdpServer {
 
 impl UdpServer {
     pub fn new(mut libos: LibOS) -> Result<Self> {
-        let sockqd: QDesc = match libos.socket(AF_INET, SOCK_DGRAM, 0) {
+        let sockqd = match libos.socket(AF_INET, SOCK_DGRAM, 0) {
             Ok(sockqd) => sockqd,
             Err(e) => anyhow::bail!("failed to create socket: {:?}", e),
         };
@@ -92,7 +92,7 @@ impl UdpServer {
 
     fn run(&mut self, local: SocketAddr, fill_char: u8, num_sends: usize) -> Result<()> {
         // Wait for half the packets that we sent. We chose this number randomly to account for lost packets.
-        let num_receives: usize = num_sends / 2;
+        let num_receives = num_sends / 2;
 
         match self.libos.bind(self.sockqd, local) {
             Ok(()) => (),
@@ -100,7 +100,7 @@ impl UdpServer {
         };
 
         for i in 0..num_receives {
-            let qt: QToken = match self.libos.pop(self.sockqd, None) {
+            let qt = match self.libos.pop(self.sockqd, None) {
                 Ok(qt) => qt,
                 Err(e) => anyhow::bail!("pop failed: {:?}", e),
             };
@@ -112,9 +112,9 @@ impl UdpServer {
 
             if let Some(sga) = self.sga {
                 // Sanity check received data.
-                let ptr: *mut u8 = sga.segments[0].data_buf_ptr as *mut u8;
-                let len: usize = sga.segments[0].data_len_bytes as usize;
-                let slice: &mut [u8] = unsafe { slice::from_raw_parts_mut(ptr, len) };
+                let ptr = sga.segments[0].data_buf_ptr as *mut u8;
+                let len = sga.segments[0].data_len_bytes as usize;
+                let slice = unsafe { slice::from_raw_parts_mut(ptr, len) };
                 for x in slice {
                     demikernel::ensure_eq!(*x, fill_char);
                 }
@@ -150,7 +150,7 @@ pub struct UdpClient {
 
 impl UdpClient {
     pub fn new(mut libos: LibOS) -> Result<Self> {
-        let sockqd: QDesc = match libos.socket(AF_INET, SOCK_DGRAM, 0) {
+        let sockqd = match libos.socket(AF_INET, SOCK_DGRAM, 0) {
             Ok(sockqd) => sockqd,
             Err(e) => anyhow::bail!("failed to create socket: {:?}", e),
         };
@@ -164,13 +164,13 @@ impl UdpClient {
 
     fn run(
         &mut self,
-        local_socket_addr: SocketAddr,
-        remote_socket_addr: SocketAddr,
+        local_addr: SocketAddr,
+        remote_addr: SocketAddr,
         fill_char: u8,
         bufsize_bytes: usize,
         num_sends: usize,
     ) -> Result<()> {
-        match self.libos.bind(self.sockqd, local_socket_addr) {
+        match self.libos.bind(self.sockqd, local_addr) {
             Ok(()) => (),
             Err(e) => anyhow::bail!("bind failed: {:?}", e),
         };
@@ -182,7 +182,7 @@ impl UdpClient {
             };
 
             if let Some(sga) = self.sga {
-                let qt: QToken = match self.libos.pushto(self.sockqd, &sga, remote_socket_addr) {
+                let qt = match self.libos.pushto(self.sockqd, &sga, remote_addr) {
                     Ok(qt) => qt,
                     Err(e) => anyhow::bail!("push failed: {:?}", e),
                 };
@@ -225,29 +225,23 @@ pub fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() >= 3 {
-        let libos_name: LibOSName = match LibOSName::from_env() {
+        let libos_name = match LibOSName::from_env() {
             Ok(libos_name) => libos_name.into(),
             Err(e) => anyhow::bail!("{:?}", e),
         };
-        let libos: LibOS = match LibOS::new(libos_name, None) {
+        let libos = match LibOS::new(libos_name, None) {
             Ok(libos) => libos,
             Err(e) => anyhow::bail!("failed to initialize libos: {:?}", e),
         };
-        let local_socket_addr: SocketAddr = SocketAddr::from_str(&args[2])?;
+        let local_addr = SocketAddr::from_str(&args[2])?;
 
         if args[1] == "--server" {
-            let mut server: UdpServer = UdpServer::new(libos)?;
-            return server.run(local_socket_addr, FILL_CHAR, NUM_SENDS);
+            let mut server = UdpServer::new(libos)?;
+            return server.run(local_addr, FILL_CHAR, NUM_SENDS);
         } else if args[1] == "--client" && args.len() == 4 {
-            let remote_socket_addr: SocketAddr = SocketAddr::from_str(&args[3])?;
-            let mut client: UdpClient = UdpClient::new(libos)?;
-            return client.run(
-                local_socket_addr,
-                remote_socket_addr,
-                FILL_CHAR,
-                BUFSIZE_BYTES,
-                NUM_SENDS,
-            );
+            let remote_addr = SocketAddr::from_str(&args[3])?;
+            let mut client = UdpClient::new(libos)?;
+            return client.run(local_addr, remote_addr, FILL_CHAR, BUFSIZE_BYTES, NUM_SENDS);
         }
     }
 

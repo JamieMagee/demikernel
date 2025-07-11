@@ -33,34 +33,24 @@ macro_rules! append_test_result {
 }
 
 fn main() -> Result<()> {
-    let args: ProgramArguments = ProgramArguments::new()?;
-    let mut libos: LibOS = {
-        let libos_name: LibOSName = LibOSName::from_env()?.into();
-        LibOS::new(libos_name, None)?
-    };
-    let mut num_failed_tests: usize = 0;
-    let mut test_results: Vec<(String, String, Result<(), anyhow::Error>)> = Vec::new();
+    let args = ProgramArguments::new()?;
+    let mut libos = LibOS::new(LibOSName::from_env()?.into(), None)?;
+    let mut num_failed = 0;
+    let mut results = Vec::new();
 
-    append_test_result!(
-        test_results,
-        bind::run_tests(&mut libos, &args.local_socket_addr().ip())
-    );
+    append_test_result!(results, bind::run_tests(&mut libos, &args.local_addr().ip()));
+    append_test_result!(results, close::run_tests(&mut libos, &args.local_addr().ip()));
 
-    append_test_result!(
-        test_results,
-        close::run_tests(&mut libos, &args.local_socket_addr().ip())
-    );
-
-    for (test_name, test_status, test_result) in test_results {
-        println!("[{}] {}", test_status, test_name);
+    for (name, status, test_result) in results {
+        println!("[{}] {}", status, name);
         if let Err(e) = test_result {
-            num_failed_tests += 1;
+            num_failed += 1;
             println!("    {}", e);
         }
     }
 
-    if num_failed_tests > 0 {
-        anyhow::bail!("{} tests failed", num_failed_tests);
+    if num_failed > 0 {
+        anyhow::bail!("{} tests failed", num_failed);
     }
 
     println!("all tests passed");
