@@ -133,19 +133,19 @@ impl ArpHeader {
         pkt
     }
 
-    pub fn get_operation(&self) -> ArpOperation {
+    pub fn operation(&self) -> ArpOperation {
         self.operation
     }
 
-    pub fn get_sender_hardware_addr(&self) -> MacAddress {
+    pub fn sender_hardware_addr(&self) -> MacAddress {
         self.sender_hardware_addr
     }
 
-    pub fn get_sender_protocol_addr(&self) -> Ipv4Addr {
+    pub fn sender_protocol_addr(&self) -> Ipv4Addr {
         self.sender_protocol_addr
     }
 
-    pub fn get_destination_protocol_addr(&self) -> Ipv4Addr {
+    pub fn target_protocol_addr(&self) -> Ipv4Addr {
         self.target_protocol_addr
     }
 }

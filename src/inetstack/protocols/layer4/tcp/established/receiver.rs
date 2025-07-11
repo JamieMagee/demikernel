@@ -281,7 +281,7 @@ impl Receiver {
         Ok(())
     }
 
-    pub fn get_receive_window_size(&self) -> u32 {
+    pub fn receive_window_size(&self) -> u32 {
         let bytes_unread: u32 = (self.receive_next_seq_no - self.reader_next_seq_no).into();
         // The window should be less than 1GB or 64KB without scaling.
         debug_assert!(
@@ -296,7 +296,7 @@ impl Receiver {
     }
 
     pub fn hdr_window_size(&self) -> u16 {
-        let window_size = self.get_receive_window_size();
+        let window_size = self.receive_window_size();
         let hdr_window_size = expect_ok!(
             (window_size >> self.window_scale_shift_bits).try_into(),
             "Window size overflow"
@@ -399,7 +399,7 @@ impl Receiver {
 
         let receive_next = cb.receiver.receive_next_seq_no;
 
-        let after_receive_window = receive_next + SeqNumber::from(cb.receiver.get_receive_window_size());
+        let after_receive_window = receive_next + SeqNumber::from(cb.receiver.receive_window_size());
 
         // Check if this segment fits in our receive window.
         // In the optimal case it starts at RCV.NXT, so we check for that first.

@@ -79,7 +79,7 @@ impl SharedEngine {
     }
 
     pub fn advance_clock(&mut self, now: Instant) {
-        self.libos.get_runtime().advance_clock(now)
+        self.libos.runtime().advance_clock(now)
     }
 
     pub fn push_frame(&mut self, bytes: DemiBuffer) {
@@ -89,7 +89,7 @@ impl SharedEngine {
     }
 
     pub async fn ipv4_ping(&mut self, dest_ipv4_addr: Ipv4Addr, timeout: Option<Duration>) -> Result<Duration, Fail> {
-        self.libos.get_transport().ping(dest_ipv4_addr, timeout).await
+        self.libos.transport().ping(dest_ipv4_addr, timeout).await
     }
 
     pub fn udp_pushto(&mut self, qd: QDesc, buf: DemiBuffer, to: SocketAddrV4) -> Result<QToken, Fail> {
@@ -156,16 +156,16 @@ impl SharedEngine {
     }
 
     pub async fn arp_query(self, ipv4_addr: Ipv4Addr) -> Result<MacAddress, Fail> {
-        self.libos.get_transport().arp_query(ipv4_addr).await
+        self.libos.transport().arp_query(ipv4_addr).await
     }
 
     pub fn export_arp_cache(&self) -> HashMap<Ipv4Addr, MacAddress> {
-        self.libos.get_transport().export_arp_cache()
+        self.libos.transport().export_arp_cache()
     }
 
     pub fn wait(&self, qt: QToken) -> Result<(QDesc, OperationResult), Fail> {
         for _ in 0..MAX_LOOP_ITERATIONS {
-            match self.get_runtime().wait(qt, Duration::ZERO) {
+            match self.runtime().wait(qt, Duration::ZERO) {
                 Ok(result) => return Ok(result),
                 Err(e) if e.errno == libc::ETIMEDOUT => continue,
                 Err(e) => return Err(e),
@@ -174,17 +174,17 @@ impl SharedEngine {
         Err(Fail::new(libc::ETIMEDOUT, "Should have returned a completed task"))
     }
 
-    pub fn get_runtime(&self) -> SharedDemiRuntime {
-        self.libos.get_runtime().clone()
+    pub fn runtime(&self) -> SharedDemiRuntime {
+        self.libos.runtime().clone()
     }
 
-    pub fn get_transport(&self) -> SharedInetStack {
-        self.libos.get_transport().clone()
+    pub fn transport(&self) -> SharedInetStack {
+        self.libos.transport().clone()
     }
 
     // Just poll the scheduler to process some packets.
     fn run_scheduler(&mut self) {
-        match self.get_runtime().wait_any(&[], Duration::ZERO) {
+        match self.runtime().wait_any(&[], Duration::ZERO) {
             Ok(_) => unreachable!("Should not have completed a task without qtokens passed in"),
             Err(e) => assert_eq!(e.errno, libc::ETIMEDOUT),
         };

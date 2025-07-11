@@ -105,23 +105,23 @@ impl ProgramArguments {
         Ok(args)
     }
 
-    pub fn get_socket_addr(&self) -> SocketAddr {
+    pub fn socket_addr(&self) -> SocketAddr {
         self.socket_addr
     }
 
-    pub fn get_num_clients(&self) -> Option<usize> {
+    pub fn num_clients(&self) -> Option<usize> {
         self.num_clients
     }
 
-    pub fn get_peer_type(&self) -> Option<String> {
+    pub fn peer_type(&self) -> Option<String> {
         self.peer_type.clone()
     }
 
-    pub fn get_who_closes(&self) -> Option<String> {
+    pub fn who_closes(&self) -> Option<String> {
         self.who_closes.clone()
     }
 
-    pub fn get_run_mode(&self) -> String {
+    pub fn run_mode(&self) -> String {
         self.run_mode.clone()
     }
 }

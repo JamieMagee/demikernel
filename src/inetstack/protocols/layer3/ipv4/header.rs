@@ -265,15 +265,15 @@ impl Ipv4Header {
         buf[10..12].copy_from_slice(&checksum.to_be_bytes());
     }
 
-    pub fn get_src_addr(&self) -> Ipv4Addr {
+    pub fn src_addr(&self) -> Ipv4Addr {
         self.src_addr
     }
 
-    pub fn get_dest_addr(&self) -> Ipv4Addr {
+    pub fn dst_addr(&self) -> Ipv4Addr {
         self.dst_addr
     }
 
-    pub fn get_protocol(&self) -> IpProtocol {
+    pub fn protocol(&self) -> IpProtocol {
         self.protocol
     }
 

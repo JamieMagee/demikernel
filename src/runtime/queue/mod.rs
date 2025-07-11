@@ -37,7 +37,7 @@ pub type BackgroundTask = TaskWithResult<()>;
 struct InternalId(usize);
 
 pub trait IoQueue: Any {
-    fn get_qtype(&self) -> QType;
+    fn qtype(&self) -> QType;
     fn as_any_ref(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
     fn as_any(self: Box<Self>) -> Box<dyn Any>;
@@ -71,19 +71,18 @@ impl IoQueueTable {
         qd
     }
 
-    /// Gets the type of the queue.
     pub fn get_type(&self, qd: &QDesc) -> Result<QType, Fail> {
-        Ok(self.get_queue_ref(qd)?.get_qtype())
+        Ok(self.queue_ref(qd)?.qtype())
     }
 
     /// Gets/borrows a reference to the queue metadata associated with an I/O queue descriptor.
     pub fn get<'a, T: IoQueue>(&'a self, qd: &QDesc) -> Result<&'a T, Fail> {
-        downcast_queue_ptr::<T>(self.get_queue_ref(qd)?)
+        downcast_queue_ptr::<T>(self.queue_ref(qd)?)
     }
 
     /// Gets/borrows a mutable reference to the queue metadata associated with an I/O queue descriptor
     pub fn get_mut<'a, T: IoQueue>(&'a mut self, qd: &QDesc) -> Result<&'a mut T, Fail> {
-        downcast_mut_ptr::<T>(self.get_mut_queue_ref(qd)?)
+        downcast_mut_ptr::<T>(self.queue_ref_mut(qd)?)
     }
 
     /// Releases the entry associated with an I/O queue descriptor.
@@ -99,8 +98,7 @@ impl IoQueueTable {
         downcast_queue::<T>(self.table.remove(internal_id.into()))
     }
 
-    /// Gets an iterator over all registered queues.
-    pub fn get_values(&self) -> Iter<'_, Box<dyn IoQueue>> {
+    pub fn values(&self) -> Iter<'_, Box<dyn IoQueue>> {
         self.table.iter()
     }
 
@@ -109,7 +107,7 @@ impl IoQueueTable {
     }
 
     /// Gets the index in the I/O queue descriptors table to which a given I/O queue descriptor refers to.
-    fn get_queue_ref(&self, qd: &QDesc) -> Result<&Box<dyn IoQueue>, Fail> {
+    fn queue_ref(&self, qd: &QDesc) -> Result<&Box<dyn IoQueue>, Fail> {
         if let Some(internal_id) = self.qd_to_offset.get(qd) {
             if let Some(queue) = self.table.get(internal_id.into()) {
                 return Ok(queue);
@@ -121,7 +119,7 @@ impl IoQueueTable {
         Err(Fail::new(libc::EBADF, &cause))
     }
 
-    fn get_mut_queue_ref(&mut self, qd: &QDesc) -> Result<&mut Box<dyn IoQueue>, Fail> {
+    fn queue_ref_mut(&mut self, qd: &QDesc) -> Result<&mut Box<dyn IoQueue>, Fail> {
         if let Some(internal_id) = self.qd_to_offset.get(qd) {
             if let Some(queue) = self.table.get_mut(internal_id.into()) {
                 return Ok(queue);
@@ -245,7 +243,7 @@ mod tests {
     pub struct TestQueue {}
 
     impl IoQueue for TestQueue {
-        fn get_qtype(&self) -> QType {
+        fn qtype(&self) -> QType {
             QType::TestQueue
         }
 

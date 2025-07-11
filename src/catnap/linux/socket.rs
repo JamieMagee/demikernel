@@ -75,8 +75,8 @@ impl SharedSocketData {
         let _self = self.as_ref();
         match _self {
             SocketData::Inactive(Some(socket)) => socket,
-            SocketData::Active(data) => data.get_socket(),
-            SocketData::Passive(data) => data.get_socket(),
+            SocketData::Active(data) => data.socket(),
+            SocketData::Passive(data) => data.socket(),
             _ => panic!("Should have data"),
         }
     }
@@ -86,8 +86,8 @@ impl SharedSocketData {
         let _self = self.as_mut();
         match _self {
             SocketData::Inactive(Some(socket)) => socket,
-            SocketData::Active(data) => data.get_mut_socket(),
-            SocketData::Passive(data) => data.get_mut_socket(),
+            SocketData::Active(data) => data.socket_mut(),
+            SocketData::Passive(data) => data.socket_mut(),
             _ => panic!("Should have data"),
         }
     }

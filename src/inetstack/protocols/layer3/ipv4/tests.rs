@@ -117,9 +117,9 @@ fn test_ipv4_header_parse_good() -> Result<()> {
 
         match Ipv4Header::parse_and_strip(&mut buffer) {
             Ok(ipv4_hdr) => {
-                assert_eq!(ipv4_hdr.get_src_addr(), ALICE_IPV4);
-                assert_eq!(ipv4_hdr.get_dest_addr(), BOB_IPV4);
-                assert_eq!(ipv4_hdr.get_protocol(), IpProtocol::UDP);
+                assert_eq!(ipv4_hdr.src_addr(), ALICE_IPV4);
+                assert_eq!(ipv4_hdr.dst_addr(), BOB_IPV4);
+                assert_eq!(ipv4_hdr.protocol(), IpProtocol::UDP);
                 assert_eq!(buffer.len(), PAYLOAD_SIZE);
                 assert_eq!(buffer[..], data_bytes[..]);
             },

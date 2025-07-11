@@ -803,9 +803,9 @@ impl Simulation {
     }
 
     fn check_ipv4_header(&self, header: &Ipv4Header, protocol: IpProtocol) -> Result<()> {
-        ensure_eq!(header.get_src_addr(), self.local_sockaddr.ip().to_owned());
-        ensure_eq!(header.get_dest_addr(), self.remote_sockaddr.ip().to_owned());
-        ensure_eq!(header.get_protocol(), protocol);
+        ensure_eq!(header.src_addr(), self.local_sockaddr.ip().to_owned());
+        ensure_eq!(header.dst_addr(), self.remote_sockaddr.ip().to_owned());
+        ensure_eq!(header.protocol(), protocol);
         Ok(())
     }
 
@@ -891,7 +891,7 @@ impl Simulation {
         let header = Ipv4Header::parse_and_strip(buffer)?;
         self.check_ipv4_header(&header, IpProtocol::TCP)?;
 
-        let header = TcpHeader::parse_and_strip(&header.get_src_addr(), &header.get_dest_addr(), buffer, true)?;
+        let header = TcpHeader::parse_and_strip(&header.src_addr(), &header.dst_addr(), buffer, true)?;
         ensure_eq!(tcp_packet.seqnum.win as usize, buffer.len());
         self.check_tcp_header(&header, tcp_packet)?;
 

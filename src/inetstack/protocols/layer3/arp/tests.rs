@@ -52,7 +52,7 @@ fn arp_immediate_reply() -> Result<()> {
     // Move clock forward and poll the engine.
     now += Duration::from_micros(1);
     engine.advance_clock(now);
-    engine.get_runtime().poll_background_tasks();
+    engine.runtime().poll_background_tasks();
 
     // Check if the ARP cache outputs a reply message.
     let mut buffers = engine.pop_expected_frames(1);
@@ -67,10 +67,10 @@ fn arp_immediate_reply() -> Result<()> {
 
     // Sanity check ARP header.
     let arp_header = ArpHeader::parse_and_consume(pkt)?;
-    crate::ensure_eq!(arp_header.get_operation(), ArpOperation::Reply);
-    crate::ensure_eq!(arp_header.get_sender_hardware_addr(), local_mac);
-    crate::ensure_eq!(arp_header.get_sender_protocol_addr(), local_ipv4);
-    crate::ensure_eq!(arp_header.get_destination_protocol_addr(), remote_ipv4);
+    crate::ensure_eq!(arp_header.operation(), ArpOperation::Reply);
+    crate::ensure_eq!(arp_header.sender_hardware_addr(), local_mac);
+    crate::ensure_eq!(arp_header.sender_protocol_addr(), local_ipv4);
+    crate::ensure_eq!(arp_header.target_protocol_addr(), remote_ipv4);
 
     Ok(())
 }
@@ -120,10 +120,10 @@ fn arp_cache_update() -> Result<()> {
     // Move clock forward and poll the engine.
     now += Duration::from_micros(1);
     engine.advance_clock(now);
-    engine.get_runtime().poll_background_tasks();
+    engine.runtime().poll_background_tasks();
 
     // Check if the ARP cache has been updated.
-    let cache = engine.get_transport().export_arp_cache();
+    let cache = engine.transport().export_arp_cache();
     crate::ensure_eq!(cache.get(&other_remote_ipv4), Some(&other_remote_mac));
 
     // Check if the ARP cache outputs a reply message.
@@ -139,10 +139,10 @@ fn arp_cache_update() -> Result<()> {
 
     // Sanity check ARP header.
     let arp_header = ArpHeader::parse_and_consume(first_pkt)?;
-    crate::ensure_eq!(arp_header.get_operation(), ArpOperation::Reply);
-    crate::ensure_eq!(arp_header.get_sender_hardware_addr(), local_mac);
-    crate::ensure_eq!(arp_header.get_sender_protocol_addr(), local_ipv4);
-    crate::ensure_eq!(arp_header.get_destination_protocol_addr(), other_remote_ipv4);
+    crate::ensure_eq!(arp_header.operation(), ArpOperation::Reply);
+    crate::ensure_eq!(arp_header.sender_hardware_addr(), local_mac);
+    crate::ensure_eq!(arp_header.sender_protocol_addr(), local_ipv4);
+    crate::ensure_eq!(arp_header.target_protocol_addr(), other_remote_ipv4);
 
     Ok(())
 }
@@ -152,15 +152,15 @@ fn arp_cache_timeout() -> Result<()> {
     let mut now = Instant::now();
     let other_remote_ipv4 = test_helpers::CARRIE_IPV4;
     let mut engine = new_engine(now, test_helpers::ALICE_CONFIG_PATH)?;
-    let mut inetstack = engine.get_transport();
+    let mut inetstack = engine.transport();
     let coroutine = Box::pin(async move { inetstack.arp_query(other_remote_ipv4).await }.fuse());
     let _qt = engine
-        .get_runtime()
+        .runtime()
         .clone()
         .insert_nonpolling_coroutine("arp query", coroutine)?;
 
     for _ in 0..(ARP_RETRY_COUNT + 1) {
-        engine.get_runtime().poll_foreground_tasks();
+        engine.runtime().poll_foreground_tasks();
         // Check if the ARP cache outputs a reply message.
         let buffers = engine.pop_expected_frames(1);
         crate::ensure_eq!(buffers.len(), 1);

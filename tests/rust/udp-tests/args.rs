@@ -51,7 +51,7 @@ impl ProgramArguments {
         })
     }
 
-    pub fn get_local_socket_addr(&self) -> SocketAddr {
+    pub fn local_socket_addr(&self) -> SocketAddr {
         self.local_socket_addr
     }
 

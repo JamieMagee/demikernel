@@ -56,14 +56,14 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
         // This was previously checked in the LibOS layer.
         debug_assert!(typ == Type::STREAM || typ == Type::DGRAM);
 
-        let qtype: QType = match typ {
+        let qtype = match typ {
             Type::STREAM => QType::TcpSocket,
             Type::DGRAM => QType::UdpSocket,
             // The following statement is unreachable because we have checked this on the libOS layer.
             _ => unreachable!("Invalid socket type (typ={:?})", typ),
         };
 
-        let socket: T::SocketDescriptor = transport.socket(domain, typ)?;
+        let socket = transport.socket(domain, typ)?;
         Ok(Self(SharedObject::new(NetworkQueue::<T> {
             qtype,
             state_machine: SocketStateMachine::new_unbound(typ),
@@ -74,7 +74,7 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
 
     pub fn set_socket_option(&mut self, option: SocketOption) -> Result<(), Fail> {
         if self.state_machine.ensure_not_closing().is_err() {
-            let cause: &'static str = "cannot set socket-level options when socket is closing";
+            let cause = "cannot set socket-level options when socket is closing";
             warn!("set_socket_option(): {}", cause);
             return Err(Fail::new(libc::EBUSY, cause));
         }
@@ -131,8 +131,8 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
     pub async fn accept_coroutine(&mut self) -> Result<Self, Fail> {
         // 1. Block until either the accept operation completes or the state changes.
         let (socket, addr) = match {
-            let mut state_machine: SocketStateMachine = self.state_machine.clone();
-            let mut transport: T = self.transport.clone();
+            let mut state_machine = self.state_machine.clone();
+            let mut transport = self.transport.clone();
             let state_tracker = state_machine.while_may_accept().fuse();
             let operation = transport.accept(&mut self.socket).fuse();
             pin_mut!(state_tracker);
@@ -180,9 +180,9 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
         // 1. Move to a connecting state.
         self.state_machine.connecting(remote);
         // 2. Wait until either the connect completes or the socket state changes.
-        let result: Result<(), Fail> = {
-            let mut state_machine: SocketStateMachine = self.state_machine.clone();
-            let mut transport: T = self.transport.clone();
+        let result = {
+            let mut state_machine = self.state_machine.clone();
+            let mut transport = self.transport.clone();
             let state_tracker = state_machine.while_open().fuse();
             let operation = transport.connect(&mut self.socket, remote).fuse();
             pin_mut!(state_tracker);
@@ -237,8 +237,8 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
 
     /// Block until either the close finishes or some other coroutine closes the connection.
     async fn wait_for_close(&mut self) {
-        let mut state_machine: SocketStateMachine = self.state_machine.clone();
-        let mut transport: T = self.transport.clone();
+        let mut state_machine = self.state_machine.clone();
+        let mut transport = self.transport.clone();
         let state_tracker = state_machine.while_closing().fuse();
         let operation = transport.close(&mut self.socket).fuse();
         pin_mut!(state_tracker);
@@ -270,8 +270,8 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
         self.state_machine.may_push()?;
 
         let result = {
-            let mut state_machine: SocketStateMachine = self.state_machine.clone();
-            let mut transport: T = self.transport.clone();
+            let mut state_machine = self.state_machine.clone();
+            let mut transport = self.transport.clone();
             let state_tracker = state_machine.while_open().fuse();
             let operation = transport.push(&mut self.socket, bufs, addr).fuse();
             pin_mut!(state_tracker);
@@ -305,8 +305,8 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
         self.state_machine.may_pop()?;
         let size: usize = size.unwrap_or(limits::RECVBUF_SIZE_MAX);
 
-        let mut state_machine: SocketStateMachine = self.state_machine.clone();
-        let mut transport: T = self.transport.clone();
+        let mut state_machine = self.state_machine.clone();
+        let mut transport = self.transport.clone();
         let state_tracker = state_machine.while_open().fuse();
         let operation = transport.pop(&mut self.socket, size).fuse();
         pin_mut!(state_tracker);
@@ -331,7 +331,7 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
 //======================================================================================================================
 
 impl<T: NetworkTransport> IoQueue for SharedNetworkQueue<T> {
-    fn get_qtype(&self) -> crate::QType {
+    fn qtype(&self) -> crate::QType {
         self.qtype
     }
 

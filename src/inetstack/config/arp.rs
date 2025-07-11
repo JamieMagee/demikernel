@@ -47,19 +47,19 @@ impl ArpConfig {
         }
     }
 
-    pub fn get_cache_ttl(&self) -> Duration {
+    pub fn cache_ttl(&self) -> Duration {
         self.cache_ttl
     }
 
-    pub fn get_request_timeout(&self) -> Duration {
+    pub fn request_timeout(&self) -> Duration {
         self.request_timeout
     }
 
-    pub fn get_retry_count(&self) -> usize {
+    pub fn retry_count(&self) -> usize {
         self.retry_count
     }
 
-    pub fn get_initial_values(&self) -> &HashMap<Ipv4Addr, MacAddress> {
+    pub fn initial_values(&self) -> &HashMap<Ipv4Addr, MacAddress> {
         &self.initial_values
     }
 
@@ -74,7 +74,7 @@ impl ArpConfig {
 
 impl Default for ArpConfig {
     fn default() -> Self {
-        ArpConfig {
+        Self {
             cache_ttl: Duration::from_secs(15),
             request_timeout: Duration::from_secs(20),
             retry_count: 5,
@@ -97,10 +97,10 @@ mod tests {
     #[test]
     fn test_arp_config_default() -> Result<()> {
         let config: ArpConfig = ArpConfig::default();
-        crate::ensure_eq!(config.get_cache_ttl(), Duration::from_secs(15));
-        crate::ensure_eq!(config.get_request_timeout(), Duration::from_secs(20));
-        crate::ensure_eq!(config.get_retry_count(), 5);
-        crate::ensure_eq!(config.get_initial_values(), &HashMap::new());
+        crate::ensure_eq!(config.cache_ttl(), Duration::from_secs(15));
+        crate::ensure_eq!(config.request_timeout(), Duration::from_secs(20));
+        crate::ensure_eq!(config.retry_count(), 5);
+        crate::ensure_eq!(config.initial_values(), &HashMap::new());
         crate::ensure_eq!(config.is_enabled(), true);
 
         Ok(())

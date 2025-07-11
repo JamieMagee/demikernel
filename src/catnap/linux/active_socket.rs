@@ -176,11 +176,11 @@ impl ActiveSocketData {
         self.recv_queue.push_front(Ok((addr, buf)));
     }
 
-    pub fn get_socket(&self) -> &Socket {
+    pub fn socket(&self) -> &Socket {
         &self.socket
     }
 
-    pub fn get_mut_socket(&mut self) -> &mut Socket {
+    pub fn socket_mut(&mut self) -> &mut Socket {
         &mut self.socket
     }
 }

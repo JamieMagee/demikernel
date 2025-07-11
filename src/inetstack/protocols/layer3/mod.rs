@@ -92,17 +92,17 @@ impl SharedLayer3Endpoint {
                     }
 
                     if bad_src(header) {
-                        warn!("dropping packet: Invalid source addr ({})", header.get_src_addr());
+                        warn!("dropping packet: Invalid source addr ({})", header.src_addr());
                         continue;
                     }
 
-                    let protocol = header.get_protocol();
+                    let protocol = header.protocol();
                     match protocol {
                         IpProtocol::ICMPv4 => {
                             self.icmpv4.receive(header, packet);
                             continue;
                         },
-                        _ => batch.push((header.get_src_addr(), protocol, packet)),
+                        _ => batch.push((header.src_addr(), protocol, packet)),
                     }
                 },
                 EtherType2::Ipv6 => warn!("Ipv6 not supported yet"), // Ignore for now.
@@ -112,7 +112,7 @@ impl SharedLayer3Endpoint {
     }
 
     fn is_for_us(&mut self, header: Ipv4Header) -> bool {
-        let dst = header.get_dest_addr();
+        let dst = header.dst_addr();
         dst == self.local_ip || dst.is_broadcast()
     }
 
@@ -169,7 +169,7 @@ impl SharedLayer3Endpoint {
 }
 
 fn bad_src(hdr: Ipv4Header) -> bool {
-    let src = hdr.get_src_addr();
+    let src = hdr.src_addr();
     src.is_broadcast() || src.is_multicast() || src.is_unspecified()
 }
 

@@ -36,7 +36,6 @@ impl LibOSName {
 // Trait Implementations
 //======================================================================================================================
 
-/// Conversion trait implementation for LibOSName.
 impl From<String> for LibOSName {
     fn from(str: String) -> Self {
         match str.to_lowercase().as_str() {

@@ -83,36 +83,30 @@ impl<T> AsyncQueue<T> {
         self.queue.pop_front()
     }
 
-    /// Get the length of the queue.
     pub fn len(&self) -> usize {
         self.queue.len()
     }
 
-    /// Check if the queue is empty.
     #[allow(unused)]
     pub fn is_empty(&self) -> bool {
         self.queue.is_empty()
     }
 
-    /// Get an iterator over values
     #[allow(unused)]
-    pub fn get_values(&self) -> Iter<T> {
+    pub fn values(&self) -> Iter<T> {
         self.queue.iter()
     }
 
     #[allow(unused)]
-    /// Get an iterator over mutable values
-    pub fn get_mut_values(&mut self) -> IterMut<T> {
+    pub fn values_mut(&mut self) -> IterMut<T> {
         self.queue.iter_mut()
     }
 
-    /// Get refernce to first item.
-    pub fn get_front(&self) -> Option<&T> {
+    pub fn front(&self) -> Option<&T> {
         self.queue.front()
     }
 
-    /// Get mutable reference to first item.
-    pub fn get_front_mut(&mut self) -> Option<&mut T> {
+    pub fn front_mut(&mut self) -> Option<&mut T> {
         self.queue.front_mut()
     }
 }

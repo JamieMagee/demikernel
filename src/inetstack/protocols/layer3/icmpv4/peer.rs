@@ -126,7 +126,7 @@ impl SharedIcmpv4Peer {
             match icmpv4_hdr.get_protocol() {
                 Icmpv4Type2::EchoRequest { id, seq_num } => {
                     if let Err(e) = self
-                        .send_packet(Icmpv4Type2::EchoReply { id, seq_num }, header.get_src_addr(), buffer)
+                        .send_packet(Icmpv4Type2::EchoReply { id, seq_num }, header.src_addr(), buffer)
                         .await
                     {
                         warn!("Could not send packet: {:?}", e);
@@ -185,7 +185,7 @@ impl SharedIcmpv4Peer {
         let seq_num = self.make_seq_num();
         let echo_request = Icmpv4Type2::EchoRequest { id, seq_num };
 
-        let t0 = self.runtime.get_now();
+        let t0 = self.runtime.now();
         let pkt = DemiBuffer::new_with_headroom(
             ICMPV4_ECHO_REQUEST_MESSAGE_SIZE,
             (ICMPV4_HEADER_SIZE + IPV4_HEADER_MIN_SIZE as usize + ETHERNET2_HEADER_SIZE) as u16,
@@ -219,7 +219,7 @@ impl SharedIcmpv4Peer {
         {
             Ok(_) => {
                 self.inflight.remove(&(id, seq_num));
-                Ok(self.runtime.get_now() - t0)
+                Ok(self.runtime.now() - t0)
             },
             Err(_) => {
                 let message = "timer expired";

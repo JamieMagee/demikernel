@@ -122,11 +122,10 @@ impl NetworkLibOSWrapper {
     pub fn listen(&mut self, sockqd: QDesc, mut backlog: usize) -> Result<(), Fail> {
         // Truncate backlog length.
         if backlog > SOMAXCONN as usize {
-            let cause: String = format!(
-                "backlog length is too large, truncating (qd={:?}, backlog={:?})",
+            debug!(
+                "listen(): backlog length is too large, truncating (qd={:?}, backlog={:?})",
                 sockqd, backlog
             );
-            debug!("listen(): {}", &cause);
             backlog = SOMAXCONN as usize;
         }
 
@@ -223,10 +222,10 @@ impl NetworkLibOSWrapper {
         trace!("wait(): qt={:?}, timeout={:?}", qt, timeout);
 
         // Put the QToken into a single element array.
-        let qt_array: [QToken; 1] = [qt];
+        let qt_array = [qt];
 
         // Call wait_any() to do the real work.
-        let (offset, qr): (usize, demi_qresult_t) = self.wait_any(&qt_array, timeout)?;
+        let (offset, qr) = self.wait_any(&qt_array, timeout)?;
         debug_assert_eq!(offset, 0);
         Ok(qr)
     }

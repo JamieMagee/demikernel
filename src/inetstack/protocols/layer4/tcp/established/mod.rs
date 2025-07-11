@@ -188,7 +188,7 @@ impl SharedEstablishedSocket {
             tcp_hdr,
         );
 
-        let now = self.runtime.get_now();
+        let now = self.runtime.now();
         let mut layer3_endpoint = self.layer3_endpoint.clone();
         Receiver::receive(&mut self.control_block, &mut layer3_endpoint, tcp_hdr, buf, now);
     }

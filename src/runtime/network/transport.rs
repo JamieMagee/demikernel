@@ -86,5 +86,5 @@ pub trait NetworkTransport: Clone + 'static + DemiMemoryAllocator {
     fn close(&mut self, sd: &mut Self::SocketDescriptor) -> impl std::future::Future<Output = Result<(), Fail>>;
 
     /// Pull the common runtime out of the transport. We only need this because traits do not support members.
-    fn get_runtime(&self) -> &SharedDemiRuntime;
+    fn runtime(&self) -> &SharedDemiRuntime;
 }

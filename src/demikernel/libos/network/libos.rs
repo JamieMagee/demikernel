@@ -108,7 +108,7 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
 
         // We only support the wildcard address for UDP sockets.
         // FIXME: https://github.com/demikernel/demikernel/issues/189
-        if *socket_addrv4.ip() == Ipv4Addr::UNSPECIFIED && self.get_shared_queue(&qd)?.get_qtype() != QType::UdpSocket {
+        if *socket_addrv4.ip() == Ipv4Addr::UNSPECIFIED && self.get_shared_queue(&qd)?.qtype() != QType::UdpSocket {
             let cause: String = format!("cannot bind to wildcard address (qd={:?})", qd);
             error!("bind(): {}", cause);
             return Err(Fail::new(libc::ENOTSUP, &cause));
@@ -116,7 +116,7 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
 
         // We only support the wildcard address for UDP sockets.
         // FIXME: https://github.com/demikernel/demikernel/issues/582
-        if socket_addr.port() == 0 && self.get_shared_queue(&qd)?.get_qtype() != QType::UdpSocket {
+        if socket_addr.port() == 0 && self.get_shared_queue(&qd)?.qtype() != QType::UdpSocket {
             let cause: String = format!("cannot bind to port 0 (qd={:?})", qd);
             error!("bind(): {}", cause);
             return Err(Fail::new(libc::ENOTSUP, &cause));
@@ -534,12 +534,10 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
         }
     }
 
-    /// Allocates a scatter-gather array.
     pub fn sgaalloc(&self, size: usize) -> Result<demi_sgarray_t, Fail> {
         sgaalloc(size, &self.transport)
     }
 
-    /// Releases a scatter-gather array.
     pub fn sgafree(&self, sga: demi_sgarray_t) -> Result<(), Fail> {
         sgafree(sga)
     }
@@ -550,13 +548,13 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
         self.runtime.get_shared_queue::<SharedNetworkQueue<T>>(qd)
     }
 
-    /// This exposes the transport for testing purposes.
-    pub fn get_transport(&self) -> T {
+    /// For testing only.
+    pub fn transport(&self) -> T {
         self.transport.clone()
     }
 
-    /// This exposes the transport for testing purposes.
-    pub fn get_runtime(&self) -> SharedDemiRuntime {
+    /// For testing only.
+    pub fn runtime(&self) -> SharedDemiRuntime {
         self.runtime.clone()
     }
 }

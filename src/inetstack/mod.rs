@@ -286,7 +286,7 @@ impl NetworkTransport for SharedInetStack {
         self.layer4_endpoint.pop(sd, size).await
     }
 
-    fn get_runtime(&self) -> &SharedDemiRuntime {
+    fn runtime(&self) -> &SharedDemiRuntime {
         &self.runtime
     }
 }

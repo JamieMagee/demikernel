@@ -59,7 +59,7 @@ impl LibOS {
     pub fn new(libos_name: LibOSName, _perf_callback: Option<demi_callback_t>) -> Result<Self, Fail> {
         logging::initialize();
 
-        let config_path: String = match env::var("CONFIG_PATH") {
+        let config_path = match env::var("CONFIG_PATH") {
             Ok(config_path) => config_path,
             Err(_) => {
                 return Err(Fail::new(
@@ -74,12 +74,12 @@ impl LibOS {
             set_callback(callback)
         };
 
-        let config: Config = Config::new(config_path)?;
+        let config = Config::new(config_path)?;
         #[allow(unused_mut)]
-        let mut runtime: SharedDemiRuntime = SharedDemiRuntime::default();
+        let mut runtime = SharedDemiRuntime::default();
         // Instantiate LibOS.
         #[allow(unreachable_patterns)]
-        let libos: LibOS = match libos_name {
+        let libos = match libos_name {
             #[cfg(feature = "catnap-libos")]
             LibOSName::Catnap => Self::NetworkLibOS(NetworkLibOSWrapper::Catnap(SharedNetworkLibOS::<
                 SharedCatnapTransport,
@@ -90,10 +90,9 @@ impl LibOS {
 
             #[cfg(feature = "catpowder-libos")]
             LibOSName::Catpowder => {
-                let layer1_endpoint: SharedCatpowderRuntime = SharedCatpowderRuntime::new(&config)?;
+                let layer1_endpoint = SharedCatpowderRuntime::new(&config)?;
                 // This is our transport for Catpowder.
-                let inetstack: SharedInetStack =
-                    SharedInetStack::new(&config, runtime.clone(), layer1_endpoint).unwrap();
+                let inetstack = SharedInetStack::new(&config, runtime.clone(), layer1_endpoint).unwrap();
                 Self::NetworkLibOS(NetworkLibOSWrapper::Catpowder(
                     SharedNetworkLibOS::<SharedInetStack>::new(runtime, inetstack),
                 ))
@@ -101,9 +100,8 @@ impl LibOS {
             #[cfg(feature = "catnip-libos")]
             LibOSName::Catnip => {
                 // TODO: Remove some of these clones once we are done merging the libOSes.
-                let layer1_endpoint: SharedDPDKRuntime = SharedDPDKRuntime::new(&config)?;
-                let inetstack: SharedInetStack =
-                    SharedInetStack::new(&config, runtime.clone(), layer1_endpoint).unwrap();
+                let layer1_endpoint = SharedDPDKRuntime::new(&config)?;
+                let inetstack = SharedInetStack::new(&config, runtime.clone(), layer1_endpoint).unwrap();
 
                 Self::NetworkLibOS(NetworkLibOSWrapper::Catnip(SharedNetworkLibOS::<SharedInetStack>::new(
                     runtime, inetstack,
@@ -216,7 +214,7 @@ impl LibOS {
         if let Some(size) = size {
             // Check if size is valid.
             if !((size > 0) && (size <= limits::POP_SIZE_MAX)) {
-                let cause: String = format!("invalid pop size (size={:?})", size);
+                let cause = format!("invalid pop size (size={:?})", size);
                 error!("pop(): {:?}", &cause);
                 return Err(Fail::new(libc::EINVAL, &cause));
             }

@@ -195,7 +195,7 @@ impl Sender {
     }
 
     fn update_retransmit_deadline(&mut self, now: Instant) -> Option<Instant> {
-        match self.unacked_queue.get_front() {
+        match self.unacked_queue.front() {
             Some(UnackedSegment {
                 bytes: _,
                 initial_tx: Some(initial_tx),
@@ -250,12 +250,12 @@ impl Sender {
             // We can always send the FIN immediately.
             cb.sender.fin_seq_no = Some(cb.sender.unsent_next_seq_no);
             cb.sender.unsent_next_seq_no = cb.sender.unsent_next_seq_no + 1.into();
-            Self::send_fin(cb, layer3_endpoint, runtime.get_now())?;
+            Self::send_fin(cb, layer3_endpoint, runtime.now())?;
         } else {
             for mut buf in bufs.into_iter() {
                 cb.sender.unsent_next_seq_no = cb.sender.unsent_next_seq_no + (buf.len() as u32).into();
                 if cb.sender.send_window.get() > 0 {
-                    Self::send_segment(cb, layer3_endpoint, runtime.get_now(), &mut buf);
+                    Self::send_segment(cb, layer3_endpoint, runtime.now(), &mut buf);
 
                     if !buf.is_empty() {
                         cb.sender.unsent_queue.push(buf);
@@ -286,7 +286,7 @@ impl Sender {
         loop {
             // Get next bit of unsent data.
             let buffer = cb.sender.unsent_queue.pop(None).await?;
-            Self::send_buffer(cb, layer3_endpoint, runtime.get_now(), buffer).await?;
+            Self::send_buffer(cb, layer3_endpoint, runtime.now(), buffer).await?;
         }
     }
 
@@ -565,7 +565,7 @@ impl Sender {
                     cb.sender.rto_calculator.back_off();
 
                     // RFC 6298 Section 5.6: Restart the retransmission timer with the new RTO.
-                    let deadline = runtime.get_now() + cb.sender.rto_calculator.rto();
+                    let deadline = runtime.now() + cb.sender.rto_calculator.rto();
                     cb.sender.retransmit_deadline_time_secs.set(Some(deadline));
                 },
                 Err(_) => {
@@ -579,7 +579,7 @@ impl Sender {
 
     /// Retransmits the earliest segment that has not (yet) been acknowledged by our peer.
     pub fn retransmit(cb: &mut ControlBlock, layer3_endpoint: &mut SharedLayer3Endpoint) {
-        if let Some(segment) = cb.sender.unacked_queue.get_front_mut() {
+        if let Some(segment) = cb.sender.unacked_queue.front_mut() {
             // We're retransmitting this, so we can no longer use an ACK for it as an RTT measurement (as we can't tell
             // if the ACK is for the original or the retransmission).  Remove the transmission timestamp from the entry.
             segment.initial_tx.take();

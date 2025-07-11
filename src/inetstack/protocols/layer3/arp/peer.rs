@@ -67,9 +67,9 @@ impl SharedArpPeer {
     ) -> Result<Self, Fail> {
         let arp_config = ArpConfig::new(config)?;
         let cache = ArpCache::new(
-            runtime.get_now(),
-            Some(arp_config.get_cache_ttl()),
-            Some(arp_config.get_initial_values()),
+            runtime.now(),
+            Some(arp_config.cache_ttl()),
+            Some(arp_config.initial_values()),
             arp_config.is_enabled(),
         );
 
@@ -150,32 +150,32 @@ impl SharedArpPeer {
             // > hardware address field of the entry with the new
             // > information in the packet and set Merge_flag to true.
             let merge_flag = {
-                if self.cache.get(header.get_sender_protocol_addr()).is_some() {
+                if self.cache.get(header.sender_protocol_addr()).is_some() {
                     trace!(
                         "poll(): updating the arp cache (link_addr={:?}, ipv4_addr={:?})",
-                        header.get_sender_hardware_addr(),
-                        header.get_sender_protocol_addr()
+                        header.sender_hardware_addr(),
+                        header.sender_protocol_addr()
                     );
-                    self.do_insert(header.get_sender_protocol_addr(), header.get_sender_hardware_addr());
+                    self.do_insert(header.sender_protocol_addr(), header.sender_hardware_addr());
                     true
                 } else {
                     trace!(
                         "poll(): arp cache miss (link_addr={:?}, ipv4_addr={:?})",
-                        header.get_sender_hardware_addr(),
-                        header.get_sender_protocol_addr()
+                        header.sender_hardware_addr(),
+                        header.sender_protocol_addr()
                     );
                     false
                 }
             };
             // from RFC 826: ?Am I the target protocol address?
-            if header.get_destination_protocol_addr() != self.local_ipv4_addr {
+            if header.target_protocol_addr() != self.local_ipv4_addr {
                 if !merge_flag {
                     warn!("arp_cache::poll(): unrecognized IP address");
                 }
                 trace!(
                     "poll(): dropping arp packet (link_addr={:?}, ipv4_addr={:?})",
-                    header.get_sender_hardware_addr(),
-                    header.get_sender_protocol_addr()
+                    header.sender_hardware_addr(),
+                    header.sender_protocol_addr()
                 );
                 continue;
             }
@@ -186,13 +186,13 @@ impl SharedArpPeer {
             if !merge_flag {
                 trace!(
                     "poll(): adding entry to the arp cache (link_addr={:?}, ipv4_addr={:?})",
-                    header.get_sender_hardware_addr(),
-                    header.get_sender_protocol_addr()
+                    header.sender_hardware_addr(),
+                    header.sender_protocol_addr()
                 );
-                self.do_insert(header.get_sender_protocol_addr(), header.get_sender_hardware_addr());
+                self.do_insert(header.sender_protocol_addr(), header.sender_hardware_addr());
             }
 
-            match header.get_operation() {
+            match header.operation() {
                 ArpOperation::Request => {
                     // from RFC 826:
                     // > Swap hardware and protocol fields, putting the local
@@ -201,14 +201,14 @@ impl SharedArpPeer {
                         ArpOperation::Reply,
                         self.layer2_endpoint.get_local_link_addr(),
                         self.local_ipv4_addr,
-                        header.get_sender_hardware_addr(),
-                        header.get_sender_protocol_addr(),
+                        header.sender_hardware_addr(),
+                        header.sender_protocol_addr(),
                     );
                     debug!("Responding {:?}", reply_hdr);
 
                     if let Err(e) = self
                         .layer2_endpoint
-                        .transmit_arp_packet(header.get_sender_hardware_addr(), reply_hdr.create_and_serialize())
+                        .transmit_arp_packet(header.sender_hardware_addr(), reply_hdr.create_and_serialize())
                     {
                         // Ignore for now because the other end will retry.
                         // TODO: Implement a retry mechanism so we do not have to wait for the other end to time out.
@@ -219,11 +219,11 @@ impl SharedArpPeer {
                 ArpOperation::Reply => {
                     debug!(
                         "reply from `{}/{}`",
-                        header.get_sender_protocol_addr(),
-                        header.get_sender_hardware_addr()
+                        header.sender_protocol_addr(),
+                        header.sender_hardware_addr()
                     );
                     self.cache
-                        .insert(header.get_sender_protocol_addr(), header.get_sender_hardware_addr());
+                        .insert(header.sender_protocol_addr(), header.sender_hardware_addr());
                 },
             }
         }
@@ -249,7 +249,7 @@ impl SharedArpPeer {
         // > The frequency of the ARP request is very close to one per
         // > second, the maximum suggested by [RFC1122].
         let result = {
-            for i in 0..self.arp_config.get_retry_count() + 1 {
+            for i in 0..self.arp_config.retry_count() + 1 {
                 if let Err(e) = self
                     .layer2_endpoint
                     .transmit_arp_packet(MacAddress::broadcast(), header.create_and_serialize())
@@ -259,7 +259,7 @@ impl SharedArpPeer {
                 }
                 let arp_response = peer.do_wait_link_addr(ipv4_addr);
 
-                match conditional_yield_with_timeout(arp_response, self.arp_config.get_request_timeout()).await {
+                match conditional_yield_with_timeout(arp_response, self.arp_config.request_timeout()).await {
                     Ok(link_addr) => {
                         debug!("ARP result available ({:?})", link_addr);
                         return Ok(link_addr);

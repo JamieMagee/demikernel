@@ -128,7 +128,7 @@ impl SharedPassiveSocket {
         }
 
         // See if this packet is for an already established but not accepted socket.
-        if let Some((_, socket)) = self.ready.get_values().find(|(addr, _)| *addr == remote) {
+        if let Some((_, socket)) = self.ready.values().find(|(addr, _)| *addr == remote) {
             if let Ok(socket) = socket {
                 socket.clone().receive(tcp_hdr, buf);
             }

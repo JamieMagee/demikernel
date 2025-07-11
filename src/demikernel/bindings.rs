@@ -562,8 +562,7 @@ pub unsafe extern "C" fn demi_wait_next_n(
         Some(unsafe { Duration::new((*timeout).tv_sec as u64, (*timeout).tv_nsec as u32) })
     };
 
-    let out_slice: &mut [MaybeUninit<demi_qresult_t>] =
-        unsafe { slice::from_raw_parts_mut(qr_out.cast(), qr_out_size as usize) };
+    let out_slice = unsafe { slice::from_raw_parts_mut(qr_out.cast(), qr_out_size as usize) };
     let mut result_idx = 0;
     let wait_callback = |result: demi_qresult_t| -> bool {
         out_slice[result_idx as usize] = MaybeUninit::new(result);
@@ -1025,7 +1024,7 @@ mod test {
     fn test_set_and_get_linger() -> anyhow::Result<()> {
         use crate::runtime::types::demi_args_t;
         let args = demi_args_t::default();
-        let result: c_int = unsafe { demi_init(&args) };
+        let result = unsafe { demi_init(&args) };
         ensure_eq!(result, 0);
 
         let mut qd = 0;

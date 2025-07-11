@@ -92,15 +92,15 @@ impl ProgramArguments {
         Ok(args)
     }
 
-    pub fn get_remote_socket_addr(&self) -> SocketAddr {
+    pub fn remote_socket_addr(&self) -> SocketAddr {
         self.remote_socket_addr
     }
 
-    pub fn get_bufsize(&self) -> usize {
+    pub fn bufsize(&self) -> usize {
         self.bufsize_bytes
     }
 
-    pub fn get_injection_rate(&self) -> u64 {
+    pub fn injection_rate(&self) -> u64 {
         self.injection_rate_microseconds
     }
 
@@ -141,9 +141,9 @@ impl Application {
     const LOG_INTERVAL_SECONDS: u64 = 5;
 
     pub fn new(mut libos: LibOS, args: &ProgramArguments) -> Result<Self> {
-        let remote_socket_addr: SocketAddr = args.get_remote_socket_addr();
-        let bufsize_bytes: usize = args.get_bufsize();
-        let injection_rate_microseconds: u64 = args.get_injection_rate();
+        let remote_socket_addr: SocketAddr = args.remote_socket_addr();
+        let bufsize_bytes: usize = args.bufsize();
+        let injection_rate_microseconds: u64 = args.injection_rate();
 
         let sockqd: QDesc = match libos.socket(AF_INET, SOCK_STREAM, 0) {
             Ok(sockqd) => sockqd,

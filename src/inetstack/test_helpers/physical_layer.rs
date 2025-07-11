@@ -68,8 +68,7 @@ impl SharedTestPhysicalLayer {
         self.incoming.push_back(pkt);
     }
 
-    /// Get the underlying DemiRuntime.
-    pub fn get_runtime(&self) -> SharedDemiRuntime {
+    pub fn runtime(&self) -> SharedDemiRuntime {
         self.runtime.clone()
     }
 }

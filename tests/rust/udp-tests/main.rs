@@ -43,12 +43,12 @@ fn main() -> Result<()> {
 
     append_test_result!(
         test_results,
-        bind::run_tests(&mut libos, &args.get_local_socket_addr().ip())
+        bind::run_tests(&mut libos, &args.local_socket_addr().ip())
     );
 
     append_test_result!(
         test_results,
-        close::run_tests(&mut libos, &args.get_local_socket_addr().ip())
+        close::run_tests(&mut libos, &args.local_socket_addr().ip())
     );
 
     for (test_name, test_status, test_result) in test_results {

@@ -74,11 +74,11 @@ impl ProgramArguments {
         Ok(args)
     }
 
-    pub fn get_local_socket_addr(&self) -> SocketAddr {
+    pub fn local_socket_addr(&self) -> SocketAddr {
         self.local_socket_addr
     }
 
-    pub fn get_remote_socket_addr(&self) -> SocketAddr {
+    pub fn remote_socket_addr(&self) -> SocketAddr {
         self.remote_socket_addr
     }
 
@@ -103,8 +103,8 @@ impl Application {
     const LOG_INTERVAL_SECONDS: u64 = 5;
 
     pub fn new(mut libos: LibOS, args: &ProgramArguments) -> Result<Self> {
-        let local_socket_addr: SocketAddr = args.get_local_socket_addr();
-        let remote_socket_addr: SocketAddr = args.get_remote_socket_addr();
+        let local_socket_addr: SocketAddr = args.local_socket_addr();
+        let remote_socket_addr: SocketAddr = args.remote_socket_addr();
 
         let sockqd: QDesc = match libos.socket(AF_INET, SOCK_DGRAM, 0) {
             Ok(sockqd) => sockqd,

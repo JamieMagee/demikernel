@@ -61,7 +61,7 @@ impl DummyLibOS {
     }
 
     pub fn wait(&mut self, qt: QToken, timeout: Duration) -> Result<(QDesc, OperationResult), Fail> {
-        self.get_runtime().wait(qt, timeout)
+        self.runtime().wait(qt, timeout)
     }
 }
 

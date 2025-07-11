@@ -276,7 +276,7 @@ impl SharedDemiRuntime {
         mut acceptor: Acceptor,
         timeout: Duration,
     ) -> Result<(), Fail> {
-        let deadline_time = self.get_now() + timeout;
+        let deadline_time = self.now() + timeout;
         loop {
             if self.completed_tasks.is_empty() {
                 self.run_scheduler();
@@ -290,7 +290,7 @@ impl SharedDemiRuntime {
                     return Ok(());
                 }
             }
-            if self.get_now() >= deadline_time {
+            if self.now() >= deadline_time {
                 break;
             } else {
                 self.advance_clock_to_now();
@@ -361,8 +361,7 @@ impl SharedDemiRuntime {
         self.ts_iters = (self.ts_iters + 1) % TIMER_RESOLUTION;
     }
 
-    /// Gets the current time according to our internal timer.
-    pub fn get_now(&self) -> Instant {
+    pub fn now(&self) -> Instant {
         timer::global_get_time()
     }
 
@@ -380,13 +379,11 @@ impl SharedDemiRuntime {
         }
     }
 
-    /// Inserts a mapping and returns the previously mapped queue descriptor if it exists.
     pub fn insert_socket_id_to_qd(&mut self, id: SocketId, qd: QDesc) -> Option<QDesc> {
         trace!("Insert socket id to queue descriptor mapping: {:?} -> {:?}", id, qd);
         self.socket_id_to_qdesc_map.insert(id, qd)
     }
 
-    /// Removes a mapping and returns the mapped queue descriptor.
     pub fn remove_socket_id_to_qd(&mut self, id: &SocketId) -> Option<QDesc> {
         match self.socket_id_to_qdesc_map.remove(id) {
             Some(qd) => {
@@ -404,7 +401,7 @@ impl SharedDemiRuntime {
     }
 
     pub fn is_addr_in_use(&self, socket_addrv4: SocketAddrV4) -> bool {
-        trace!("Check address in use: {:?}", socket_addrv4);
+        trace!("is_addr_in_use: checking: {:?}", socket_addrv4);
         self.socket_id_to_qdesc_map.is_in_use(socket_addrv4)
     }
 

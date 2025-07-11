@@ -12,8 +12,6 @@ use crate::{pal::KeepAlive, runtime::fail::Fail, MacAddress};
 use ::std::ffi::CString;
 use ::std::{collections::HashMap, fs::File, io::Read, net::Ipv4Addr, ops::Index, str::FromStr, time::Duration};
 use ::yaml_rust::{Yaml, YamlLoader};
-#[cfg(feature = "catnip-libos")]
-use yaml_rust::yaml::Array;
 
 //======================================================================================================================
 // Constants
@@ -127,85 +125,80 @@ pub struct Config(pub Yaml);
 impl Config {
     /// Reads the config file into the [Config] object.
     pub fn new(config_path: String) -> Result<Self, Fail> {
-        let mut config_s: String = String::new();
-        File::open(config_path).unwrap().read_to_string(&mut config_s).unwrap();
-        let config: Vec<Yaml> = YamlLoader::load_from_str(&config_s).unwrap();
-        let config_obj: &Yaml = match &config[..] {
+        let mut cfg_str = String::new();
+        File::open(config_path).unwrap().read_to_string(&mut cfg_str).unwrap();
+        let cfg = YamlLoader::load_from_str(&cfg_str).unwrap();
+        let cfg = match &cfg[..] {
             [c] => c,
             _ => return Err(Fail::new(libc::EINVAL, "Wrong number of config objects")),
         };
 
-        Ok(Self(config_obj.clone()))
+        Ok(Self(cfg.clone()))
     }
 
-    fn get_global_config(&self) -> Result<&Yaml, Fail> {
+    fn global_config(&self) -> Result<&Yaml, Fail> {
         Self::get_subsection(&self.0, global_config::SECTION_NAME)
     }
 
-    fn get_tcp_socket_options(&self) -> Result<&Yaml, Fail> {
+    fn tcp_socket_options(&self) -> Result<&Yaml, Fail> {
         Self::get_subsection(&self.0, tcp_socket_options::SECTION_NAME)
     }
 
-    fn get_inetstack_config(&self) -> Result<&Yaml, Fail> {
+    fn inetstack_config(&self) -> Result<&Yaml, Fail> {
         Self::get_subsection(&self.0, inetstack_config::SECTION_NAME)
     }
 
     #[cfg(feature = "catnip-libos")]
-    fn get_dpdk_config(&self) -> Result<&Yaml, Fail> {
+    fn dpdk_config(&self) -> Result<&Yaml, Fail> {
         Self::get_subsection(&self.0, dpdk_config::SECTION_NAME)
     }
 
     #[cfg(feature = "catpowder-libos")]
-    fn get_raw_socket_config(&self) -> Result<&Yaml, Fail> {
+    fn raw_socket_config(&self) -> Result<&Yaml, Fail> {
         Self::get_subsection(&self.0, raw_socket_config::SECTION_NAME)
     }
 
     /// Global config: The value from the env var takes precedence over the value from file.
     pub fn local_ipv4_addr(&self) -> Result<Ipv4Addr, Fail> {
-        let local_ipv4_addr: Ipv4Addr = if let Some(addr) = Self::get_typed_env_option(global_config::LOCAL_IPV4_ADDR)?
-        {
-            addr
+        let ip: Ipv4Addr = if let Some(ip) = Self::get_typed_env_option(global_config::LOCAL_IPV4_ADDR)? {
+            ip
         } else {
-            Self::get_typed_str_option(
-                self.get_global_config()?,
-                global_config::LOCAL_IPV4_ADDR,
-                |val: &str| val.parse().ok(),
-            )?
+            Self::get_typed_str_option(self.global_config()?, global_config::LOCAL_IPV4_ADDR, |val: &str| {
+                val.parse().ok()
+            })?
         };
 
-        if local_ipv4_addr.is_unspecified() || local_ipv4_addr.is_broadcast() {
-            let cause: &'static str = "Invalid IPv4 address";
+        if ip.is_unspecified() || ip.is_broadcast() {
+            let cause = "Invalid IPv4 address";
             error!("local_ipv4_addr(): {:?}", cause);
             return Err(Fail::new(libc::EINVAL, cause));
         }
-        Ok(local_ipv4_addr)
+        Ok(ip)
     }
 
     /// The value from the env var takes precedence over the value from file.
     pub fn local_link_addr(&self) -> Result<MacAddress, Fail> {
-        if let Some(addr) = Self::get_typed_env_option(global_config::LOCAL_LINK_ADDR)? {
-            Ok(addr)
+        if let Some(mac) = Self::get_typed_env_option(global_config::LOCAL_LINK_ADDR)? {
+            Ok(mac)
         } else {
-            Self::get_typed_str_option(
-                self.get_global_config()?,
-                global_config::LOCAL_LINK_ADDR,
-                |val: &str| MacAddress::parse_canonical_str(val).ok(),
-            )
+            Self::get_typed_str_option(self.global_config()?, global_config::LOCAL_LINK_ADDR, |val: &str| {
+                MacAddress::parse_canonical_str(val).ok()
+            })
         }
     }
 
     /// Tcp socket option: Reads TCP keepalive settings as a `tcp_keepalive` structure from "tcp_keepalive" subsection.
     pub fn tcp_keepalive(&self) -> Result<KeepAlive, Fail> {
-        let section: &Yaml = Self::get_subsection(self.get_tcp_socket_options()?, tcp_socket_options::KEEP_ALIVE)?;
-        let onoff: bool = Self::get_bool_option(section, "enabled")?;
+        let section = Self::get_subsection(self.tcp_socket_options()?, tcp_socket_options::KEEP_ALIVE)?;
+        let onoff = Self::get_bool_option(section, "enabled")?;
 
         #[cfg(target_os = "windows")]
         // This indicates how long to keep the socket alive. By default, this is 2 hours on Windows.
         // README: https://learn.microsoft.com/en-us/windows/win32/winsock/sio-keepalive-vals
-        let keepalivetime: u32 = Self::get_int_option(section, "time_millis")?;
+        let keepalivetime = Self::get_int_option(section, "time_millis")?;
         #[cfg(target_os = "windows")]
         // This indicates how often to send keep alive messages. By default, this is 1 second on Windows.
-        let keepaliveinterval: u32 = Self::get_int_option(section, "interval")?;
+        let keepaliveinterval = Self::get_int_option(section, "interval")?;
 
         #[cfg(target_os = "linux")]
         return Ok(onoff);
@@ -221,10 +214,10 @@ impl Config {
     /// Tcp socket option: Reads socket linger settings from "linger" subsection. Returned value is Some(_) if enabled;
     /// otherwise, None. The linger duration will be no larger than u16::MAX seconds.
     pub fn linger(&self) -> Result<Option<Duration>, Fail> {
-        let linger: u64 = if let Some(linger) = Self::get_typed_env_option(tcp_socket_options::LINGER)? {
+        let linger = if let Some(linger) = Self::get_typed_env_option(tcp_socket_options::LINGER)? {
             linger
         } else {
-            let section: &Yaml = Self::get_subsection(self.get_tcp_socket_options()?, tcp_socket_options::LINGER)?;
+            let section = Self::get_subsection(self.tcp_socket_options()?, tcp_socket_options::LINGER)?;
             if Self::get_bool_option(section, "enabled")? {
                 Self::get_int_option(section, "time_seconds")?
             } else {
@@ -239,14 +232,14 @@ impl Config {
         if let Some(nodelay) = Self::get_typed_env_option(tcp_socket_options::NO_DELAY)? {
             Ok(nodelay)
         } else {
-            Self::get_bool_option(self.get_tcp_socket_options()?, tcp_socket_options::NO_DELAY)
+            Self::get_bool_option(self.tcp_socket_options()?, tcp_socket_options::NO_DELAY)
         }
     }
 
     /// If no ARP table is present, then ARP is disabled. This cannot be passed in as an environment variable.
     pub fn arp_table(&self) -> Result<Option<HashMap<Ipv4Addr, MacAddress>>, Fail> {
-        let config = self.get_inetstack_config()?;
-        let arp_yaml = Self::get_typed_option(config, inetstack_config::ARP_TABLE, |yaml| yaml.as_hash());
+        let cfg = self.inetstack_config()?;
+        let arp_yaml = Self::get_typed_option(cfg, inetstack_config::ARP_TABLE, |yaml| yaml.as_hash());
 
         if arp_yaml.is_err() {
             return Ok(None);
@@ -279,18 +272,17 @@ impl Config {
     }
 
     pub fn arp_cache_ttl(&self) -> Result<Duration, Fail> {
-        let ttl_secs = self.get_int_env_or_option(inetstack_config::ARP_CACHE_TTL, Self::get_inetstack_config)?;
+        let ttl_secs = self.int_env_or_option(inetstack_config::ARP_CACHE_TTL, Self::inetstack_config)?;
         Ok(Duration::from_secs(ttl_secs))
     }
 
     pub fn arp_request_timeout(&self) -> Result<Duration, Fail> {
-        let timeout_secs =
-            self.get_int_env_or_option(inetstack_config::ARP_REQUEST_TIMEOUT, Self::get_inetstack_config)?;
+        let timeout_secs = self.int_env_or_option(inetstack_config::ARP_REQUEST_TIMEOUT, Self::inetstack_config)?;
         Ok(Duration::from_secs(timeout_secs))
     }
 
     pub fn arp_request_retries(&self) -> Result<usize, Fail> {
-        self.get_int_env_or_option(inetstack_config::ARP_REQUEST_RETRIES, Self::get_inetstack_config)
+        self.int_env_or_option(inetstack_config::ARP_REQUEST_RETRIES, Self::inetstack_config)
     }
 
     #[cfg(all(feature = "catpowder-libos", target_os = "linux"))]
@@ -298,11 +290,11 @@ impl Config {
     /// configuration file.
     pub fn local_interface_name(&self) -> Result<String, Fail> {
         // Parse local MAC address.
-        if let Some(addr) = Self::get_typed_env_option(raw_socket_config::LOCAL_INTERFACE_NAME)? {
-            Ok(addr)
+        if let Some(mac) = Self::get_typed_env_option(raw_socket_config::LOCAL_INTERFACE_NAME)? {
+            Ok(mac)
         } else {
             Self::get_typed_str_option(
-                self.get_raw_socket_config()?,
+                self.raw_socket_config()?,
                 raw_socket_config::LOCAL_INTERFACE_NAME,
                 |val: &str| Some(val.to_string()),
             )
@@ -313,17 +305,15 @@ impl Config {
     /// Global config: Reads the "local interface index" parameter from the environment variable and then the underlying
     /// configuration file.
     pub fn local_interface_index(&self) -> Result<u32, Fail> {
-        self.get_int_env_or_option(raw_socket_config::LOCAL_INTERFACE_INDEX, Self::get_raw_socket_config)
+        self.int_env_or_option(raw_socket_config::LOCAL_INTERFACE_INDEX, Self::raw_socket_config)
     }
 
     #[cfg(all(feature = "catpowder-libos", target_os = "windows"))]
     /// Global config: Reads the "rx_buffer_count" and "rx_ring_size" parameters from the environment variable and
     /// then the underlying configuration file. Returns the tuple (buffer count, ring size).
     pub fn rx_buffer_config(&self) -> Result<(u32, u32), Fail> {
-        let rx_buffer_count: u32 =
-            self.get_int_env_or_option(raw_socket_config::RX_BUFFER_COUNT, Self::get_raw_socket_config)?;
-        let rx_ring_size: u32 =
-            self.get_int_env_or_option(raw_socket_config::RX_RING_SIZE, Self::get_raw_socket_config)?;
+        let rx_buffer_count = self.int_env_or_option(raw_socket_config::RX_BUFFER_COUNT, Self::raw_socket_config)?;
+        let rx_ring_size = self.int_env_or_option(raw_socket_config::RX_RING_SIZE, Self::raw_socket_config)?;
         Ok((rx_buffer_count, rx_ring_size))
     }
 
@@ -331,10 +321,8 @@ impl Config {
     /// Global config: Reads the "rx_buffer_count" and "rx_ring_size" parameters from the environment variable and
     /// then the underlying configuration file. Returns the tuple (buffer count, ring size).
     pub fn tx_buffer_config(&self) -> Result<(u32, u32), Fail> {
-        let tx_buffer_count: u32 =
-            self.get_int_env_or_option(raw_socket_config::TX_BUFFER_COUNT, Self::get_raw_socket_config)?;
-        let tx_ring_size: u32 =
-            self.get_int_env_or_option(raw_socket_config::TX_RING_SIZE, Self::get_raw_socket_config)?;
+        let tx_buffer_count = self.int_env_or_option(raw_socket_config::TX_BUFFER_COUNT, Self::raw_socket_config)?;
+        let tx_ring_size = self.int_env_or_option(raw_socket_config::TX_RING_SIZE, Self::raw_socket_config)?;
         Ok((tx_buffer_count, tx_ring_size))
     }
 
@@ -343,7 +331,7 @@ impl Config {
         if let Some(always_poke) = Self::get_typed_env_option(raw_socket_config::XDP_ALWAYS_POKE_TX)? {
             Ok(always_poke)
         } else {
-            Self::get_bool_option(self.get_raw_socket_config()?, raw_socket_config::XDP_ALWAYS_POKE_TX)
+            Self::get_bool_option(self.raw_socket_config()?, raw_socket_config::XDP_ALWAYS_POKE_TX)
         }
     }
 
@@ -352,10 +340,7 @@ impl Config {
         if let Some(addr) = Self::get_typed_env_option(raw_socket_config::LOCAL_VF_INTERFACE_INDEX)? {
             Ok(addr)
         } else {
-            Self::get_int_option(
-                self.get_raw_socket_config()?,
-                raw_socket_config::LOCAL_VF_INTERFACE_INDEX,
-            )
+            Self::get_int_option(self.raw_socket_config()?, raw_socket_config::LOCAL_VF_INTERFACE_INDEX)
         }
     }
 
@@ -368,7 +353,7 @@ impl Config {
                 if let Some(val) = val.as_bool() {
                     Ok(val)
                 } else {
-                    let cause: String = format!("Invalid value for xdp_always_send_on_vf");
+                    let cause = format!("Invalid value for xdp_always_send_on_vf");
                     error!("xdp_always_send_on_vf(): {:?}", cause);
                     Err(Fail::new(libc::EINVAL, &cause))
                 }
@@ -383,7 +368,7 @@ impl Config {
         if let Some(enabled) = Self::get_typed_env_option(raw_socket_config::XDP_COHOST_MODE)? {
             Ok(enabled)
         } else {
-            Self::get_bool_option(self.get_raw_socket_config()?, raw_socket_config::XDP_COHOST_MODE)
+            Self::get_bool_option(self.raw_socket_config()?, raw_socket_config::XDP_COHOST_MODE)
         }
     }
 
@@ -393,7 +378,7 @@ impl Config {
             if let Some(ports) = Self::get_env_option(key) {
                 Self::parse_array::<u16>(ports.as_str())
             } else {
-                Self::get_typed_option(self.get_raw_socket_config()?, key, Yaml::as_vec)?
+                Self::get_typed_option(self.raw_socket_config()?, key, Yaml::as_vec)?
                     .iter()
                     .map(|port: &Yaml| {
                         port.as_i64()
@@ -406,8 +391,8 @@ impl Config {
             }
         };
 
-        let tcp_ports: Vec<u16> = parse_ports(raw_socket_config::XDP_TCP_PORTS)?;
-        let udp_ports: Vec<u16> = parse_ports(raw_socket_config::XDP_UDP_PORTS)?;
+        let tcp_ports = parse_ports(raw_socket_config::XDP_TCP_PORTS)?;
+        let udp_ports = parse_ports(raw_socket_config::XDP_UDP_PORTS)?;
         Ok((tcp_ports, udp_ports))
     }
 
@@ -416,10 +401,7 @@ impl Config {
         if let Some(count) = Self::get_typed_env_option(raw_socket_config::XDP_RESERVED_PORT_COUNT)? {
             Ok(Some(count))
         } else {
-            match Self::get_option(
-                self.get_raw_socket_config()?,
-                raw_socket_config::XDP_RESERVED_PORT_COUNT,
-            ) {
+            match Self::get_option(self.raw_socket_config()?, raw_socket_config::XDP_RESERVED_PORT_COUNT) {
                 Ok(value) => {
                     if let Some(value) = value.as_i64() {
                         u16::try_from(value)
@@ -447,10 +429,9 @@ impl Config {
         if let Some(protocol) = Self::get_env_option(raw_socket_config::XDP_RESERVED_PORT_PROTOCOL) {
             parse(&protocol.as_str()).map(Some)
         } else {
-            if let Ok(protocol) = Self::get_option(
-                self.get_raw_socket_config()?,
-                raw_socket_config::XDP_RESERVED_PORT_PROTOCOL,
-            ) {
+            if let Ok(protocol) =
+                Self::get_option(self.raw_socket_config()?, raw_socket_config::XDP_RESERVED_PORT_PROTOCOL)
+            {
                 if let Some(value) = protocol.as_str() {
                     parse(value).map(Some)
                 } else {
@@ -465,8 +446,8 @@ impl Config {
     #[cfg(feature = "catnip-libos")]
     /// DPDK Config: Reads the "DPDK EAL" parameter the underlying configuration file.
     pub fn eal_init_args(&self) -> Result<Vec<CString>, Fail> {
-        let args: &Array = Self::get_typed_option(
-            self.get_dpdk_config()?,
+        let args = Self::get_typed_option(
+            self.dpdk_config()?,
             dpdk_config::EAL_INIT_ARGS,
             |yaml: &Yaml| match yaml {
                 Yaml::Array(ref arr) => Some(arr),
@@ -474,19 +455,19 @@ impl Config {
             },
         )?;
 
-        let mut result: Vec<CString> = Vec::<CString>::with_capacity(args.len());
+        let mut result = Vec::<CString>::with_capacity(args.len());
         for arg in args {
             match arg.as_str() {
                 Some(string) => match CString::new(string) {
                     Ok(cstring) => result.push(cstring),
                     Err(e) => {
-                        let cause: String = format!("Non string argument: {:?}", e);
+                        let cause = format!("Non string argument: {:?}", e);
                         error!("eal_init_args(): {}", cause);
                         return Err(Fail::new(libc::EINVAL, &cause));
                     },
                 },
                 None => {
-                    let cause: String = format!("Non string argument");
+                    let cause = format!("Non string argument");
                     error!("eal_init_args(): {}", cause);
                     return Err(Fail::new(libc::EINVAL, &cause));
                 },
@@ -496,23 +477,23 @@ impl Config {
     }
 
     pub fn mtu(&self) -> Result<u16, Fail> {
-        self.get_int_env_or_option(inetstack_config::MTU, Self::get_inetstack_config)
+        self.int_env_or_option(inetstack_config::MTU, Self::inetstack_config)
     }
 
     pub fn mss(&self) -> Result<usize, Fail> {
-        self.get_int_env_or_option(inetstack_config::MSS, Self::get_inetstack_config)
+        self.int_env_or_option(inetstack_config::MSS, Self::inetstack_config)
     }
 
     pub fn tcp_checksum_offload(&self) -> Result<bool, Fail> {
-        Self::get_bool_option(self.get_inetstack_config()?, inetstack_config::TCP_CHECKSUM_OFFLOAD)
+        Self::get_bool_option(self.inetstack_config()?, inetstack_config::TCP_CHECKSUM_OFFLOAD)
     }
 
     pub fn udp_checksum_offload(&self) -> Result<bool, Fail> {
-        Self::get_bool_option(self.get_inetstack_config()?, inetstack_config::UDP_CHECKSUM_OFFLOAD)
+        Self::get_bool_option(self.inetstack_config()?, inetstack_config::UDP_CHECKSUM_OFFLOAD)
     }
 
     pub fn enable_jumbo_frames(&self) -> Result<bool, Fail> {
-        Self::get_bool_option(self.get_inetstack_config()?, inetstack_config::ENABLE_JUMBO_FRAMES)
+        Self::get_bool_option(self.inetstack_config()?, inetstack_config::ENABLE_JUMBO_FRAMES)
     }
 
     //======================================================================================================================
@@ -522,11 +503,11 @@ impl Config {
     /// Similar to `require_typed_option` using `Yaml::as_hash` receiver. This method returns a `&Yaml` instead of
     /// yaml::Hash, and Yaml is more natural for indexing.
     fn get_subsection<'a>(yaml: &'a Yaml, index: &str) -> Result<&'a Yaml, Fail> {
-        let section: &'a Yaml = Self::get_option(yaml, index)?;
+        let section = Self::get_option(yaml, index)?;
         match section {
             Yaml::Hash(_) => Ok(section),
             _ => {
-                let message: String = format!("parameter \"{}\" has unexpected type", index);
+                let message = format!("parameter \"{}\" has unexpected type", index);
                 Err(Fail::new(libc::EINVAL, message.as_str()))
             },
         }
@@ -536,7 +517,7 @@ impl Config {
     fn get_option<'a>(yaml: &'a Yaml, index: &str) -> Result<&'a Yaml, Fail> {
         match yaml.index(index) {
             Yaml::BadValue => {
-                let message: String = format!("missing configuration option \"{}\"", index);
+                let message = format!("missing configuration option \"{}\"", index);
                 Err(Fail::new(libc::EINVAL, message.as_str()))
             },
             value => Ok(value),
@@ -548,11 +529,11 @@ impl Config {
     where
         Fn: FnOnce(&'a Yaml) -> Option<T>,
     {
-        let option: &'a Yaml = Self::get_option(yaml, index)?;
+        let option = Self::get_option(yaml, index)?;
         match receiver(option) {
             Some(value) => Ok(value),
             None => {
-                let message: String = format!("parameter {} has unexpected type", index);
+                let message = format!("parameter {} has unexpected type", index);
                 Err(Fail::new(libc::EINVAL, message.as_str()))
             },
         }
@@ -563,13 +544,13 @@ impl Config {
     where
         Fn: FnOnce(&str) -> Option<T>,
     {
-        let option: &Yaml = Self::get_option(yaml, index)?;
+        let option = Self::get_option(yaml, index)?;
         if let Some(value) = option.as_str() {
             if let Some(value) = parser(value) {
                 return Ok(value);
             }
         }
-        let message: String = format!("parameter {} has unexpected type", index);
+        let message = format!("parameter {} has unexpected type", index);
         Err(Fail::new(libc::EINVAL, message.as_str()))
     }
 
@@ -582,7 +563,7 @@ impl Config {
         Self::get_env_option(index)
             .map(|val: String| -> Result<T, Fail> {
                 val.as_str().parse().map_err(|_| {
-                    let message: String = format!("parameter {} has unexpected type", index);
+                    let message = format!("parameter {} has unexpected type", index);
                     Fail::new(libc::EINVAL, message.as_str())
                 })
             })
@@ -596,13 +577,13 @@ impl Config {
         match T::try_from(val) {
             Ok(val) => Ok(val),
             _ => {
-                let message: String = format!("parameter \"{}\" is out of range", index);
+                let message = format!("parameter \"{}\" is out of range", index);
                 Err(Fail::new(libc::ERANGE, message.as_str()))
             },
         }
     }
 
-    fn get_int_env_or_option<T, Fn>(&self, index: &str, resolve_yaml: Fn) -> Result<T, Fail>
+    fn int_env_or_option<T, Fn>(&self, index: &str, resolve_yaml: Fn) -> Result<T, Fail>
     where
         T: TryFrom<i64> + FromStr,
         for<'a> Fn: FnOnce(&'a Self) -> Result<&'a Yaml, Fail>,
