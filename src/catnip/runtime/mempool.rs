@@ -28,11 +28,9 @@ pub struct MemoryPool {
 // Associate Functions
 //======================================================================================================================
 
-/// Associated functions for memory pool.
 impl MemoryPool {
-    /// Creates a new memory pool.
     pub fn new(name: CString, data_room_size: usize, pool_size: usize, cache_size: usize) -> Result<Self, Fail> {
-        let pool: *mut rte_mempool = unsafe {
+        let pool = unsafe {
             rte_pktmbuf_pool_create(
                 name.as_ptr(),
                 pool_size as u32,
@@ -45,8 +43,8 @@ impl MemoryPool {
 
         // Failed to create memory pool.
         if pool.is_null() {
-            let rte_errno: libc::c_int = unsafe { rte_errno() };
-            let cause: String = format!("failed to create memory pool: {:?}", rte_errno);
+            let rte_errno = unsafe { rte_errno() };
+            let cause = format!("failed to create memory pool: {:?}", rte_errno);
             error!("new(): {}", cause);
             return Err(Fail::new(libc::EAGAIN, &cause));
         }
@@ -59,24 +57,22 @@ impl MemoryPool {
         self.pool
     }
 
-    /// Allocates a mbuf in the target memory pool.
     pub fn alloc_mbuf(&self, size: Option<usize>) -> Result<*mut rte_mbuf, Fail> {
         // TODO: Drop the following warning once DPDK memory management is more stable.
         warn!("allocating mbuf from DPDK pool");
 
-        // Allocate mbuf.
-        let mbuf_ptr: *mut rte_mbuf = unsafe { rte_pktmbuf_alloc(self.pool) };
-        if mbuf_ptr.is_null() {
-            let rte_errno: libc::c_int = unsafe { rte_errno() };
-            let cause: String = format!("cannot allocate an mbuf at this time: {:?}", rte_errno);
-            warn!("alloc_mbuf(): {}", cause);
+        let mbuf_ptr = unsafe { rte_pktmbuf_alloc(self.pool) };
 
+        if mbuf_ptr.is_null() {
+            let rte_errno = unsafe { rte_errno() };
+            let cause = format!("cannot allocate an mbuf at this time: {:?}", rte_errno);
+            warn!("alloc_mbuf(): {}", cause);
             return Err(Fail::new(libc::ENOMEM, &cause));
         }
 
         // Fill out some fields of the underlying mbuf.
         unsafe {
-            let mut num_bytes: u16 = (*mbuf_ptr).buf_len - (*mbuf_ptr).data_off;
+            let mut num_bytes = (*mbuf_ptr).buf_len - (*mbuf_ptr).data_off;
 
             if let Some(size) = size {
                 // Check if allocated buffer is big enough.
