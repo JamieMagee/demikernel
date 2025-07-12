@@ -372,7 +372,7 @@ impl PhysicalLayer for SharedDPDKRuntime {
 }
 
 impl DemiMemoryAllocator for SharedDPDKRuntime {
-    fn get_max_buffer_size_bytes(&self) -> usize {
+    fn max_buffer_size_bytes(&self) -> usize {
         self.max_body_size
     }
 

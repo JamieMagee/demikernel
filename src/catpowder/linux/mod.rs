@@ -44,14 +44,14 @@ pub struct LinuxRuntime {
 
 impl LinuxRuntime {
     pub fn new(config: &Config) -> Result<Self, Fail> {
-        let mac_addr: [u8; 6] = [0; 6];
-        let ifindex: i32 = match Self::get_ifindex(&config.local_interface_name()?) {
-            Ok(ifindex) => ifindex,
-            Err(_) => return Err(Fail::new(libc::EINVAL, "could not parse ifindex")),
-        };
-        let socket: RawSocket = RawSocket::new()?;
-        let sockaddr: RawSocketAddr = RawSocketAddr::new(ifindex, &mac_addr);
-        socket.bind(&sockaddr)?;
+        let mac_addr = [0; 6];
+
+        let ifindex = Self::ifindex_for(&config.local_interface_name()?)
+            .map_err(|_| Fail::new(libc::EINVAL, "could not parse ifindex"))?;
+
+        let socket = RawSocket::new()?;
+        let bind_addr = RawSocketAddr::new(ifindex, &mac_addr);
+        socket.bind(&bind_addr)?;
 
         let max_body_size = config.mtu()? as usize - MAX_HEADER_SIZE;
 
@@ -62,8 +62,8 @@ impl LinuxRuntime {
         })
     }
 
-    fn get_ifindex(ifname: &str) -> Result<i32, ParseIntError> {
-        let path: String = format!("/sys/class/net/{}/ifindex", ifname);
+    fn ifindex_for(ifname: &str) -> Result<i32, ParseIntError> {
+        let path = format!("/sys/class/net/{}/ifindex", ifname);
         expect_ok!(fs::read_to_string(path), "could not read ifname")
             .trim()
             .parse()
@@ -75,7 +75,7 @@ impl LinuxRuntime {
 //======================================================================================================================
 
 impl DemiMemoryAllocator for LinuxRuntime {
-    fn get_max_buffer_size_bytes(&self) -> usize {
+    fn max_buffer_size_bytes(&self) -> usize {
         self.max_body_size
     }
 
@@ -87,55 +87,50 @@ impl DemiMemoryAllocator for LinuxRuntime {
 impl Runtime for LinuxRuntime {}
 
 impl PhysicalLayer for LinuxRuntime {
-    fn transmit(&mut self, pkts: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>) -> Result<(), Fail> {
-        for pkt in pkts {
-            // We clone the packet so as to not remove the ethernet header from the outgoing message.
-            let header = Ethernet2Header::parse_and_strip(&mut pkt.clone()).unwrap();
-            let dest_addr_arr: [u8; 6] = header.dst_addr().to_array();
-            let dest_sockaddr: RawSocketAddr = RawSocketAddr::new(self.ifindex, &dest_addr_arr);
+    fn transmit(&mut self, packets: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>) -> Result<(), Fail> {
+        for packet in packets {
+            // Parse header but keep original packet untouched for sending by cloning it.
+            let header = Ethernet2Header::parse_and_strip(&mut packet.clone()).unwrap();
+            let dst_mac = header.dst_addr().to_array();
+            let addr = RawSocketAddr::new(self.ifindex, &dst_mac);
 
-            match self.socket.sendto(&pkt, &dest_sockaddr) {
-                Ok(size) if size == pkt.len() => (),
-                Ok(size) => {
-                    let cause = format!(
-                        "Incorrect number of bytes sent: packet_size={:?} sent={:?}",
-                        pkt.len(),
-                        size
-                    );
+            match self.socket.sendto(&packet, &addr) {
+                Ok(n) if n == packet.len() => (),
+                Ok(n) => {
+                    let cause = format!("transmit: partial send: packet_size={:?} sent={:?}", packet.len(), n);
                     warn!("{}", cause);
                     return Err(Fail::new(libc::EAGAIN, &cause));
                 },
                 Err(e) => {
-                    let cause = "send failed";
-                    warn!("transmit(): {} {:?}", cause, e);
-                    return Err(Fail::new(libc::EIO, &cause));
+                    warn!("transmit(): send failed: {:?}", e);
+                    return Err(Fail::new(libc::EIO, "send failed"));
                 },
             }
         }
         Ok(())
     }
 
-    // TODO: This routine currently only tries to receive a single packet buffer, not a batch of them.
+    // Only receives one packet for now.
+    // TODO: Support receiving multiple packets in a single call.
+    // TODO: Remove extra copy of the packet.
+    // TODO: Change to use `DemiBuffer` directly instead of `MaybeUninit<u8>`.
     fn receive(&mut self) -> Result<ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>, Fail> {
-        // TODO: This routine contains an extra copy of the entire incoming packet that could potentially be removed.
+        let mut recv_buffer = [unsafe { MaybeUninit::uninit().assume_init() }; limits::RECVBUF_SIZE_MAX];
 
-        // TODO: change this function to operate directly on DemiBuffer rather than on MaybeUninit<u8>.
+        let (nbytes, _src) = match self.socket.recvfrom(&mut recv_buffer) {
+            Ok(res) => res,
+            Err(_) => return Ok(ArrayVec::new()),
+        };
 
-        // This use-case is an example for MaybeUninit in the docs.
-        let mut out: [MaybeUninit<u8>; limits::RECVBUF_SIZE_MAX] =
-            [unsafe { MaybeUninit::uninit().assume_init() }; limits::RECVBUF_SIZE_MAX];
-        if let Ok((nbytes, _origin_addr)) = self.socket.recvfrom(&mut out[..]) {
-            let mut ret: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS> = ArrayVec::new();
-            unsafe {
-                let bytes: [u8; limits::RECVBUF_SIZE_MAX] =
-                    mem::transmute::<[MaybeUninit<u8>; limits::RECVBUF_SIZE_MAX], [u8; limits::RECVBUF_SIZE_MAX]>(out);
-                let mut dbuf: DemiBuffer = DemiBuffer::from_slice(&bytes)?;
-                dbuf.trim(limits::RECVBUF_SIZE_MAX - nbytes)?;
-                ret.push(dbuf);
-            }
-            Ok(ret)
-        } else {
-            Ok(ArrayVec::new())
-        }
+        let bytes = unsafe {
+            mem::transmute::<[MaybeUninit<u8>; limits::RECVBUF_SIZE_MAX], [u8; limits::RECVBUF_SIZE_MAX]>(recv_buffer)
+        };
+
+        let mut packet = DemiBuffer::from_slice(&bytes)?;
+        packet.trim(limits::RECVBUF_SIZE_MAX - nbytes)?;
+
+        let mut packets = ArrayVec::new();
+        packets.push(packet);
+        Ok(packets)
     }
 }

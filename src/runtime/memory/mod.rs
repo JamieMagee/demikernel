@@ -28,7 +28,7 @@ pub use self::{buffer_pool::*, demibuffer::*};
 //======================================================================================================================
 
 pub trait DemiMemoryAllocator {
-    fn get_max_buffer_size_bytes(&self) -> usize {
+    fn max_buffer_size_bytes(&self) -> usize {
         u16::MAX as usize
     }
 
@@ -76,11 +76,11 @@ pub fn sgaalloc<M: DemiMemoryAllocator>(size: usize, mem_alloc: &M) -> Result<de
     }
 
     // First allocate the underlying DemiBuffer.
-    if size > mem_alloc.get_max_buffer_size_bytes() * DEMI_SGARRAY_MAXLEN {
+    if size > mem_alloc.max_buffer_size_bytes() * DEMI_SGARRAY_MAXLEN {
         return Err(Fail::new(libc::EINVAL, "size too large for a single demi_sgaseg_t"));
     }
     // Calculate the number of DemiBuffers to allocate.
-    let max_buffer_size_bytes: usize = mem_alloc.get_max_buffer_size_bytes();
+    let max_buffer_size_bytes: usize = mem_alloc.max_buffer_size_bytes();
     let remainder: usize = size % max_buffer_size_bytes;
     let len: usize = (size - remainder) / max_buffer_size_bytes;
     let mut bufs: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN> = ArrayVec::new();

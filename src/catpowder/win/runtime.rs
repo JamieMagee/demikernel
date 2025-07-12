@@ -195,7 +195,7 @@ impl PhysicalLayer for SharedCatpowderRuntime {
 
 /// Memory runtime trait implementation for XDP Runtime.
 impl DemiMemoryAllocator for SharedCatpowderRuntime {
-    fn get_max_buffer_size_bytes(&self) -> usize {
+    fn max_buffer_size_bytes(&self) -> usize {
         self.0.max_body_size
     }
 
