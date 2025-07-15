@@ -307,13 +307,13 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
         if bufs.is_empty() {
             let cause = "zero-length list of buffers";
             warn!("push(): {}", cause);
-            return Err(Fail::new(libc::EINVAL, &cause));
+            return Err(Fail::new(libc::EINVAL, cause));
         }
         for buf in bufs.iter() {
             if buf.is_empty() {
                 let cause = "zero-length buffer";
                 warn!("push(): {}", cause);
-                return Err(Fail::new(libc::EINVAL, &cause));
+                return Err(Fail::new(libc::EINVAL, cause));
             };
         }
 

@@ -43,8 +43,9 @@ pub fn into_sgarray(bufs: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN>) -> Result<d
     if bufs.is_empty() {
         let cause = "cannot allocate a zero element scatter-gather array";
         error!("into_sgarray(): {}", cause);
-        return Err(Fail::new(libc::EINVAL, &cause));
+        return Err(Fail::new(libc::EINVAL, cause));
     }
+
     if bufs.len() > DEMI_SGARRAY_MAXLEN {
         let cause = format!("cannot allocate a {} element scatter-gather array", bufs.len());
         error!("into_sgarray(): {}", cause);
