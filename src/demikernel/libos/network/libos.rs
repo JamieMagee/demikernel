@@ -74,9 +74,8 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
         }
 
         if (typ != Type::STREAM) && (typ != Type::DGRAM) {
-            let cause: String = format!("socket type not supported (type={:?})", typ);
-            error!("socket(): {}", cause);
-            return Err(Fail::new(libc::ENOTSUP, &cause));
+            error!("socket(): socket type not supported (type={:?})", typ);
+            return Err(Fail::new(libc::ENOTSUP, "socket type not supported"));
         }
 
         let queue: SharedNetworkQueue<T> = SharedNetworkQueue::new(domain, typ, &mut self.transport)?;
@@ -109,24 +108,22 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
         // We only support the wildcard address for UDP sockets.
         // FIXME: https://github.com/demikernel/demikernel/issues/189
         if *socket_addrv4.ip() == Ipv4Addr::UNSPECIFIED && self.get_shared_queue(&qd)?.get_qtype() != QType::UdpSocket {
-            let cause: String = format!("cannot bind to wildcard address (qd={:?})", qd);
-            error!("bind(): {}", cause);
-            return Err(Fail::new(libc::ENOTSUP, &cause));
+            error!("bind(): cannot bind to wildcard address (qd={:?})", qd);
+            return Err(Fail::new(libc::ENOTSUP, "cannot bind to wildcard address"));
         }
 
         // We only support the wildcard address for UDP sockets.
         // FIXME: https://github.com/demikernel/demikernel/issues/582
         if socket_addr.port() == 0 && self.get_shared_queue(&qd)?.get_qtype() != QType::UdpSocket {
-            let cause: String = format!("cannot bind to port 0 (qd={:?})", qd);
-            error!("bind(): {}", cause);
-            return Err(Fail::new(libc::ENOTSUP, &cause));
+            error!("bind(): cannot bind to port 0 (qd={:?})", qd);
+            return Err(Fail::new(libc::ENOTSUP, "cannot bind to port 0"));
         }
 
         if self.runtime.is_addr_in_use(socket_addrv4) {
-            let cause: String = format!("address is already bound to a socket (qd={:?}", qd);
-            error!("bind(): {}", &cause);
-            return Err(Fail::new(libc::EADDRINUSE, &cause));
+            error!("bind(): address is already bound to a socket (qd={:?}", qd);
+            return Err(Fail::new(libc::EADDRINUSE, "address is already bound to a socket"));
         }
+
         self.get_shared_queue(&qd)?.bind(socket_addr)?;
         // Insert into address to queue descriptor table.
         self.runtime
@@ -142,12 +139,10 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
 
         // We use this API for testing, so we must check again.
         if !((backlog > 0) && (backlog <= SOMAXCONN as usize)) {
-            let cause: String = format!("invalid backlog length: {:?}", backlog);
-            warn!("{}", cause);
-            return Err(Fail::new(libc::EINVAL, &cause));
+            warn!("invalid backlog length: {:?}", backlog);
+            return Err(Fail::new(libc::EINVAL, "invalid backlog length"));
         }
 
-        // Issue listen operation.
         self.get_shared_queue(&qd)?.listen(backlog)
     }
 
@@ -303,23 +298,23 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
     /// coroutine that asynchronously runs the push and any synchronous multi-queue functionality before the push
     /// begins.
     pub fn push(&mut self, qd: QDesc, sga: &demi_sgarray_t) -> Result<QToken, Fail> {
-        let bufs = clone_sgarray(sga)?;
-        if bufs.is_empty() {
-            let cause = "zero-length list of buffers";
-            warn!("push(): {}", cause);
-            return Err(Fail::new(libc::EINVAL, cause));
+        let buffers = clone_sgarray(sga)?;
+
+        if buffers.is_empty() {
+            warn!("push(): buffers cannot be empty");
+            return Err(Fail::new(libc::EINVAL, "buffers cannot be empty"));
         }
-        for buf in bufs.iter() {
-            if buf.is_empty() {
-                let cause = "zero-length buffer";
-                warn!("push(): {}", cause);
-                return Err(Fail::new(libc::EINVAL, cause));
+
+        for buffer in buffers.iter() {
+            if buffer.is_empty() {
+                warn!("push(): empty buffer");
+                return Err(Fail::new(libc::EINVAL, "empty buffer"));
             };
         }
 
         let mut queue: SharedNetworkQueue<T> = self.get_shared_queue(&qd)?;
         let coroutine_constructor = || -> Result<QToken, Fail> {
-            let coroutine = Box::pin(self.clone().push_coroutine(qd, bufs, None).fuse());
+            let coroutine = Box::pin(self.clone().push_coroutine(qd, buffers, None).fuse());
             self.runtime
                 .clone()
                 .schedule_coroutine("ioc::network::libos::push", coroutine)
@@ -360,14 +355,14 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
     pub fn pushto(&mut self, qd: QDesc, sga: &demi_sgarray_t, remote: SocketAddr) -> Result<QToken, Fail> {
         trace!("pushto() qd={:?}", qd);
 
-        let bufs: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN> = clone_sgarray(sga)?;
-        if bufs.is_empty() {
-            return Err(Fail::new(libc::EINVAL, "zero buffers to send"));
+        let buffers: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN> = clone_sgarray(sga)?;
+        if buffers.is_empty() {
+            return Err(Fail::new(libc::EINVAL, "buffers cannot be empty"));
         }
 
         let mut queue: SharedNetworkQueue<T> = self.get_shared_queue(&qd)?;
         let coroutine_constructor = || -> Result<QToken, Fail> {
-            let coroutine = Box::pin(self.clone().push_coroutine(qd, bufs, Some(remote)).fuse());
+            let coroutine = Box::pin(self.clone().push_coroutine(qd, buffers, Some(remote)).fuse());
             self.runtime
                 .clone()
                 .schedule_coroutine("ioc::network::libos::pushto", coroutine)

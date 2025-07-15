@@ -74,9 +74,8 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
 
     pub fn set_socket_option(&mut self, option: SocketOption) -> Result<(), Fail> {
         if self.state_machine.ensure_not_closing().is_err() {
-            let cause: &'static str = "cannot set socket-level options when socket is closing";
-            warn!("set_socket_option(): {}", cause);
-            return Err(Fail::new(libc::EBUSY, cause));
+            warn!("set_socket_option(): cannot set socket options when closing");
+            return Err(Fail::new(libc::EBUSY, "cannot set socket options when closing"));
         }
 
         self.transport.clone().set_socket_option(&mut self.socket, option)
