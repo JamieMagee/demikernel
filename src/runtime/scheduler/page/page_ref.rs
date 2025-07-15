@@ -66,8 +66,7 @@ impl WakerPageRef {
 
         unsafe {
             let base_ptr: *mut u8 = self.0.as_ptr().cast();
-            let ptr = NonNull::new_unchecked(base_ptr.add(ix));
-            ptr
+            NonNull::new_unchecked(base_ptr.add(ix))
         }
     }
 }

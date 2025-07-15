@@ -147,8 +147,7 @@ mod tests {
 
     impl DummyCoroutine {
         pub fn new(val: usize) -> Self {
-            let f = Self { val };
-            f
+            Self { val }
         }
     }
     impl Future for DummyCoroutine {
