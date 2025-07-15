@@ -180,7 +180,7 @@ impl ActiveSocketData {
         &self.socket
     }
 
-    pub fn get_mut_socket(&mut self) -> &mut Socket {
+    pub fn get_socket_mut(&mut self) -> &mut Socket {
         &mut self.socket
     }
 }

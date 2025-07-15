@@ -70,25 +70,23 @@ impl SharedSocketData {
         self.set_socket_data(SocketData::Active(ActiveSocketData::new(socket)));
     }
 
-    /// Gets a reference to the actual Socket for reading the socket's metadata (mostly the raw file descriptor).
-    pub fn get_socket<'a>(&'a self) -> &'a Socket {
+    pub fn get_socket(&self) -> &Socket {
         let _self = self.as_ref();
         match _self {
             SocketData::Inactive(Some(socket)) => socket,
             SocketData::Active(data) => data.get_socket(),
             SocketData::Passive(data) => data.get_socket(),
-            _ => panic!("Should have data"),
+            _ => panic!("should have data"),
         }
     }
 
-    /// Gets a mutable reference to the actual Socket for I/O operations.
-    pub fn get_mut_socket<'a>(&'a mut self) -> &'a mut Socket {
+    pub fn get_socket_mut(&mut self) -> &mut Socket {
         let _self = self.as_mut();
         match _self {
             SocketData::Inactive(Some(socket)) => socket,
-            SocketData::Active(data) => data.get_mut_socket(),
+            SocketData::Active(data) => data.get_socket_mut(),
             SocketData::Passive(data) => data.get_mut_socket(),
-            _ => panic!("Should have data"),
+            _ => panic!("should have data"),
         }
     }
 

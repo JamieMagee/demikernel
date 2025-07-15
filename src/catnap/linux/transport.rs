@@ -203,7 +203,7 @@ impl SharedCatnapTransport {
 
     /// Internal function to get the Socket from the metadata structure, given the socket descriptor.
     fn socket_from_sd(&mut self, sd: &SockDesc) -> &mut Socket {
-        self.data_from_sd(sd).get_mut_socket()
+        self.data_from_sd(sd).get_socket_mut()
     }
 
     /// Internal function to get the metadata for the socket, given the socket descriptor.
