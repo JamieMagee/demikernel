@@ -90,9 +90,8 @@ impl ActiveSocketData {
                         // Put the buffer back and try again later.
                         self.send_queue.push_front(Outgoing { addr, buffer, result });
                     } else {
-                        let cause = format!("failed to send on socket: {:?}", errno);
-                        error!("poll_send(): {}", cause);
-                        result.set(Some(Err(Fail::new(errno, &cause))));
+                        error!("poll_send(): failed on socket: {:?}", errno);
+                        result.set(Some(Err(Fail::new(errno, "send failed on socket"))));
                     }
                 },
             }
@@ -126,9 +125,8 @@ impl ActiveSocketData {
             Err(e) => {
                 let errno = get_libc_err(e);
                 if !DemiRuntime::should_retry(errno) {
-                    let cause = format!("failed to receive on socket: {:?}", errno);
-                    error!("poll_recv(): {}", cause);
-                    self.recv_queue.push(Err(Fail::new(errno, &cause)));
+                    error!("poll_recv(): failed on socket: {:?}", errno);
+                    self.recv_queue.push(Err(Fail::new(errno, "receive failed on socket")));
                 }
             },
         }
@@ -153,21 +151,22 @@ impl ActiveSocketData {
         }
     }
 
-    /// Pops data from the socket. Blocks until some data is found but does not wait until the buf has reached [size].
+    /// Blocks until some data is found but does not wait until the buf has reached [size].
     pub async fn pop(
         &mut self,
         size: usize,
         timeout: Option<Duration>,
     ) -> Result<(Option<SocketAddr>, DemiBuffer), Fail> {
         let (addr, mut buffer) = self.recv_queue.pop(timeout).await??;
-        // Figure out how much data we got.
         let bytes_read = min(buffer.len(), size);
+
         // Trim the buffer and leave for next read if we got more than expected.
         if let Ok(remainder) = buffer.split_back(bytes_read) {
             if !remainder.is_empty() {
-                self.push_front(remainder, addr.clone());
+                self.push_front(remainder, addr);
             }
         }
+
         Ok((addr, buffer))
     }
 
