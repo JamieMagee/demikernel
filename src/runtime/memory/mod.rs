@@ -37,67 +37,65 @@ pub trait DemiMemoryAllocator {
     }
 }
 
-/// Converts a list of DemiBuffers into a scatter-gather array.
-pub fn into_sgarray(bufs: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN>) -> Result<demi_sgarray_t, Fail> {
-    // Check the sizes before allocating anything.
-    if bufs.is_empty() {
-        let cause = "cannot allocate a zero element scatter-gather array";
-        error!("into_sgarray(): {}", cause);
-        return Err(Fail::new(libc::EINVAL, cause));
+pub fn into_sgarray(buffers: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN>) -> Result<demi_sgarray_t, Fail> {
+    if buffers.is_empty() {
+        error!("into_sgarray(): buffers is empty");
+        return Err(Fail::new(libc::EINVAL, "buffers is empty"));
     }
 
-    if bufs.len() > DEMI_SGARRAY_MAXLEN {
-        let cause = format!("cannot allocate a {} element scatter-gather array", bufs.len());
-        error!("into_sgarray(): {}", cause);
-        return Err(Fail::new(libc::EINVAL, &cause));
+    if buffers.len() > DEMI_SGARRAY_MAXLEN {
+        error!(
+            "into_sgarray(): too many buffers: {}, max: {}",
+            buffers.len(),
+            DEMI_SGARRAY_MAXLEN
+        );
+        return Err(Fail::new(libc::EINVAL, "too many buffers"));
     }
 
-    // Create a scatter-gather segment to expose the DemiBuffers to the user.
-    let mut sga: demi_sgarray_t = demi_sgarray_t::default();
-    sga.num_segments = bufs.len() as u32;
+    let mut sga: demi_sgarray_t = demi_sgarray_t {
+        num_segments: buffers.len() as u32,
+        ..Default::default()
+    };
 
-    for (i, buf) in bufs.into_iter().enumerate() {
-        sga.segments[i].data_buf_ptr = buf.as_ptr() as *mut c_void;
-        sga.segments[i].data_len_bytes = buf.len() as u32;
-        sga.segments[i].reserved_metadata_ptr = buf.into_raw().as_ptr() as *mut c_void;
+    for (i, buffer) in buffers.into_iter().enumerate() {
+        sga.segments[i].data_buf_ptr = buffer.as_ptr() as *mut c_void;
+        sga.segments[i].data_len_bytes = buffer.len() as u32;
+        sga.segments[i].reserved_metadata_ptr = buffer.into_raw().as_ptr() as *mut c_void;
     }
 
-    // Create and return a new scatter-gather array (which inherits the DemiBuffer's reference).
     Ok(sga)
 }
 
-/// Allocates a scatter-gather array.
 pub fn sgaalloc<M: DemiMemoryAllocator>(size: usize, mem_alloc: &M) -> Result<demi_sgarray_t, Fail> {
-    // Check the sizes before allocating anything.
-    // We can't allocate a zero-sized buffer.
     if size == 0 {
-        let cause: &'static str = "cannot allocate a zero-sized buffer";
-        error!("sgaalloc(): {}", cause);
-        return Err(Fail::new(libc::EINVAL, cause));
+        error!("sgaalloc(): cannot allocate zero-sized buffer");
+        return Err(Fail::new(libc::EINVAL, "cannot allocate zero-sized buffer"));
     }
 
     // First allocate the underlying DemiBuffer.
     if size > mem_alloc.get_max_buffer_size_bytes() * DEMI_SGARRAY_MAXLEN {
         return Err(Fail::new(libc::EINVAL, "size too large for a single demi_sgaseg_t"));
     }
+
     // Calculate the number of DemiBuffers to allocate.
     let max_buffer_size_bytes: usize = mem_alloc.get_max_buffer_size_bytes();
     let remainder: usize = size % max_buffer_size_bytes;
     let len: usize = (size - remainder) / max_buffer_size_bytes;
     let mut bufs: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN> = ArrayVec::new();
+
     for _ in 0..len {
         bufs.push(mem_alloc.allocate_demi_buffer(max_buffer_size_bytes)?);
     }
+
     // If there is any remaining length, allocate a partial buffer.
     if remainder > 0 {
         bufs.push(mem_alloc.allocate_demi_buffer(remainder)?);
     }
+
     into_sgarray(bufs)
 }
 
-/// Releases a scatter-gather array.
 pub fn sgafree(sga: demi_sgarray_t) -> Result<(), Fail> {
-    // Check arguments.
     if sga.num_segments > DEMI_SGARRAY_MAXLEN as u32 {
         return Err(Fail::new(libc::EINVAL, "demi_sgarray_t has invalid segment count"));
     }
@@ -106,13 +104,13 @@ pub fn sgafree(sga: demi_sgarray_t) -> Result<(), Fail> {
         let buf: DemiBuffer = convert_sgaseg_to_demi_buffer(&sga.segments[i])?;
         drop(buf);
     }
+
     Ok(())
 }
 
-/// Clones a scatter-gather array. The [sga_buf] field must point to the first DemiBuffer in the chain and the elements
-/// of [segments] must be the rest of the chain.
+/// The [sga_buf] field must point to the first DemiBuffer in the chain and the elements of [segments] must be the rest
+/// of the chain.
 pub fn clone_sgarray(sga: &demi_sgarray_t) -> Result<ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN>, Fail> {
-    // Check arguments.
     if sga.num_segments > DEMI_SGARRAY_MAXLEN as u32 || sga.num_segments == 0 {
         return Err(Fail::new(libc::EINVAL, "demi_sgarray_t has invalid segment count"));
     }
